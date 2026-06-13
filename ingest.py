@@ -2,6 +2,8 @@ import os
 import pandas as pd
 from init_db import get_connection
 
+_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -51,6 +53,21 @@ def upsert_candidate(cur, race_id, name, party):
 # https://projects.fivethirtyeight.com/polls-page/data/senate_polls.csv
 # ---------------------------------------------------------------------------
 
+def _build_state_tokens(nominees_path):
+    """Build a dict mapping state abbrev -> set of lowercase name tokens from nominees.csv."""
+    ndf = pd.read_csv(nominees_path)
+    ndf["state"] = ndf["state"].astype(str).str.strip().str.upper()
+    state_tokens = {}
+    for state, grp in ndf.groupby("state"):
+        tokens = set()
+        for name in grp["name"]:
+            for tok in str(name).lower().split():
+                if len(tok) > 2:  # skip initials like "J." or "R."
+                    tokens.add(tok)
+        state_tokens[state] = tokens
+    return state_tokens
+
+
 def load_nyt_senate_polls(filepath, year=2026):
     df = pd.read_csv(filepath)
 
@@ -58,37 +75,82 @@ def load_nyt_senate_polls(filepath, year=2026):
     df = df[
         (df["stage"] == "general") &
         (df["party"].isin(["DEM", "REP"])) &
-        (df["candidate_name"] != "Don't know") &
-        (df["candidate_name"] != "Someone else")
-        ].copy()
+        (~df["candidate_name"].isin(["Don't know", "Someone else"]))
+    ].copy()
+
+    # Warn and skip generic ballot rows — they test hypothetical matchups, not actual nominees
+    _GENERIC = {"Generic Democrat", "Generic Republican"}
+    _generic_mask = df["candidate_name"].isin(_GENERIC)
+    if _generic_mask.any():
+        for name, cnt in df.loc[_generic_mask, "candidate_name"].value_counts().items():
+            print(f"WARNING: skipping {cnt} row(s) with candidate_name='{name}' (generic ballot test, not an actual nominee)")
+    df = df[~_generic_mask].copy()
+
+    # Normalize state early — needed for question-block dedup groupby below
+    df["state"] = df["state"].astype(str).str.strip().str.upper()
 
     # Prefer likely voters; fall back to registered voters, then all adults
     pop_priority = {"lv": 0, "rv": 1, "a": 2}
     df["pop_rank"] = df["population"].map(pop_priority).fillna(9)
 
-    # For each poll_id + candidate, keep only the best population group
+    # Parse end_date
+    df["end_date"] = pd.to_datetime(df["end_date"], format="mixed", errors="coerce")
+    df = df.dropna(subset=["end_date"])
+
+    # Drop stale polls: end_date more than ~18 months (548 days) before election_date
+    if "election_date" in df.columns:
+        df["_election_dt"] = pd.to_datetime(df["election_date"], errors="coerce")
+        stale_mask = df["_election_dt"].notna() & (
+            (df["_election_dt"] - df["end_date"]).dt.days > 548
+        )
+        if stale_mask.any():
+            print(f"Dropped {stale_mask.sum()} stale poll row(s) (end_date > ~18 months before election_date)")
+        df = df[~stale_mask].drop(columns=["_election_dt"])
+
+    # Question-block dedup: for each (poll_id, state), keep the question_id whose
+    # candidates best match nominees.csv.
+    #
+    # Score = (ratio of block candidates that are known nominees, absolute count of matches).
+    # A clean H2H [D, R] where both are nominees scores (1.0, 2); a full-field [D, R, L, G]
+    # where only D and R are nominees scores (0.5, 2). The cleaner block wins.
+    #
+    # This must run BEFORE population dedup — the pop dedup collapses across question_ids
+    # and makes question grouping impossible afterward.
+    if "question_id" in df.columns:
+        state_tokens = _build_state_tokens(_NOMINEES_PATH)
+        df["question_id"] = df["question_id"].fillna("__default__")
+
+        def _name_matches(candidate_name, tokens):
+            return any(tok in tokens for tok in str(candidate_name).lower().split())
+
+        def _pick_best_question(grp):
+            state = grp["state"].iloc[0]
+            tokens = state_tokens.get(state, set())
+            best_qid, best_score = None, (-1.0, -1)
+            for qid, qdf in grp.groupby("question_id", sort=False):
+                cands = qdf["candidate_name"].tolist()
+                n_match = sum(1 for c in cands if _name_matches(c, tokens))
+                total = len(cands)
+                score = (n_match / total if total else 0.0, n_match)
+                if score > best_score:
+                    best_score = score
+                    best_qid = qid
+            return grp[grp["question_id"] == best_qid]
+
+        df = (
+            df.groupby(["poll_id", "state"], group_keys=False)
+            .apply(_pick_best_question)
+            .reset_index(drop=True)
+        )
+
+    # Population dedup — after question selection so each candidate appears once per poll_id
     df = df.sort_values("pop_rank")
     df = df.drop_duplicates(subset=["poll_id", "candidate_name"], keep="first")
-
-    # Some polls run multiple questions with different candidate fields (e.g. a 3-way
-    # and a 4-way ballot test) under the same poll_id.  After the population dedup above,
-    # the same candidate can still appear twice with different pct values from different
-    # question_ids.  Keep only the question with the most candidates — it is the most
-    # complete ballot test and gives the most realistic vote-share split.
-    if "question_id" in df.columns:
-        q_counts = df.groupby(["poll_id", "question_id"])["candidate_name"].transform("count")
-        df = df.copy()
-        df["_q_count"] = q_counts
-        df = df.sort_values(["poll_id", "_q_count"], ascending=[True, False])
-        df = df.drop_duplicates(subset=["poll_id", "candidate_name"], keep="first")
-        df = df.drop(columns=["_q_count"])
 
     # Normalize party to single letter
     df["party"] = df["party"].map({"DEM": "D", "REP": "R"})
 
-    # Parse end_date to YYYY-MM-DD
-    df["end_date"] = pd.to_datetime(df["end_date"], format="mixed", errors="coerce")
-    df = df.dropna(subset=["end_date"])
+    # Format end_date as YYYY-MM-DD string for DB storage
     df["end_date"] = df["end_date"].dt.strftime("%Y-%m-%d")
 
     con = get_connection()
@@ -96,7 +158,7 @@ def load_nyt_senate_polls(filepath, year=2026):
 
     loaded = 0
     for _, row in df.iterrows():
-        state         = str(row["state"]).strip().upper()
+        state         = row["state"]
         candidate     = str(row["candidate_name"]).strip()
         party         = row["party"]
         pct           = float(row["pct"])

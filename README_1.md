@@ -93,6 +93,12 @@ python ingest.py
 
 Clears old poll data and reloads from `data/senate.csv`. Also loads `data/climate.csv` if present.
 
+Three safeguards run automatically during ingestion:
+
+- **Question-block dedup** — some polls include multiple question blocks for the same race (e.g. a head-to-head and a full-field). The block whose candidates best match `nominees.csv` is kept; the rest are discarded. This prevents the same poll from being counted more than once in the weighted average.
+- **Stale poll filter** — rows with an `end_date` more than ~18 months before `election_date` are dropped, preventing old cycle data that slipped into the feed from influencing projections.
+- **Generic ballot skip** — rows where `candidate_name` is `"Generic Democrat"` or `"Generic Republican"` are logged as warnings and skipped; they test hypothetical matchups, not actual nominees.
+
 > **Note:** A minor date-format warning may appear during this step. It's cosmetic — data loads correctly.
 
 ### Step 3 — Fetch economic indicators
@@ -134,7 +140,7 @@ Opens an interactive web dashboard at `http://localhost:8501` with sortable tabl
 Each poll's weight is determined by two factors multiplied together:
 
 - **Pollster credibility** — a 0–3 scale derived from FiveThirtyEight's numeric grade. Ungraded pollsters default to 1.0.
-- **Recency decay** — `exp(-λ × days_old)`, where `λ = 0.03`. This gives a half-life of ~23 days. A poll from two months ago carries roughly 16% of the weight of a poll from today.
+- **Recency decay** — `exp(-λ × days_old)`, where `λ = 0.0231`. This gives a half-life of ~30 days. A poll from two months ago carries roughly 25% of the weight of a poll from today.
 
 The weighted average is: `Σ(pct × credibility × decay) / Σ(credibility × decay)`
 
@@ -170,7 +176,7 @@ projected = poll_avg + (party_direction × climate_score × ECON_WEIGHT × 10)
 
 | Parameter | Location | Effect |
 |---|---|---|
-| `LAMBDA` | `model.py` | Controls recency decay rate. Higher = older polls weighted less aggressively. |
+| `LAMBDA` | `model.py` | Controls recency decay rate. Currently `0.0231` (half-life ~30 days). Higher = older polls lose weight faster. |
 | `ECON_WEIGHT` | `model.py` | Controls how much the economic climate shifts the poll average. 0 = polls only; 1.0 = full weight. |
 | `INDICATOR_RANGES` | `model.py` | Historical min/max used to normalize each FRED indicator. |
 | Pollster credibilities | `pollsters` table | Can be manually adjusted in SQLite after ingestion. |
