@@ -24,6 +24,70 @@ INDICATORS = {
 }
 
 # ---------------------------------------------------------------------------
+# Display metadata for interpretation column
+# Mirrors INDICATOR_RANGES / INDICATOR_DIRECTION in model.py but kept here
+# to avoid a circular import — this file runs standalone before model.py.
+#
+# Each entry: (low, high, direction, unit_fmt)
+#   low/high   — historical range endpoints (same as model.py)
+#   direction  — +1 means higher value = worse economy = helps D
+#                -1 means higher value = better economy = helps R
+#   unit_fmt   — a callable that formats the raw value for display
+# ---------------------------------------------------------------------------
+FACTOR_META = {
+    # Ranges must stay in sync with INDICATOR_RANGES in model.py.
+    # If you change a range there, change it here too (and vice versa).
+    #
+    # direction: +1 = higher value is worse for R incumbents (e.g. unemployment)
+    #            -1 = higher value is better for R incumbents (e.g. approval, sentiment)
+    "UNEMPLOYMENT":       (3.5,   7.0,   +1, lambda v: f"{v:.1f}%"),
+    "CPI_YOY":            (0.0,   5.0,   +1, lambda v: f"{v:.1f}% YoY"),
+    "CONSUMER_SENTIMENT": (40.0,  90.0,  -1, lambda v: f"{v:.1f}"),
+    "REAL_DISPOSABLE_INC":(16000, 21000, -1, lambda v: f"${v:,.0f}B"),
+    "GDP_GROWTH":         (-2.0,   4.0,  -1, lambda v: f"{v:.1f}%"),
+    "FED_FUNDS_RATE":     (0.0,   5.5,   +1, lambda v: f"{v:.2f}%"),
+    "PRES_APPROVAL":      (25.0,  69.0,  -1, lambda v: f"{v:.1f}%"),  # higher approval = good for R
+}
+
+# Thresholds for how far the normalized score deviates from the neutral midpoint (0.5).
+# |deviation| < 0.10  → "neutral"
+# |deviation| < 0.25  → "mild"
+# |deviation| < 0.45  → "moderate"
+# else                → "strong"
+_STRENGTH_LABELS = [(0.10, "neutral"), (0.25, "mild"), (0.45, "moderate"), (1.01, "strong")]
+
+def interpret_factor(factor_name, value):
+    """
+    Returns a human-readable string explaining how value affects projected outcomes.
+    Example: "4.1% → mild headwind for R incumbents"
+    """
+    if factor_name not in FACTOR_META:
+        return ""
+
+    low, high, direction, fmt = FACTOR_META[factor_name]
+
+    # Normalize to [0, 1], clamped — same math as model.py get_climate_score()
+    normalized = max(0.0, min(1.0, (value - low) / (high - low)))
+
+    # Deviation from neutral midpoint; direction flips sign meaning
+    deviation = (normalized - 0.5) * direction  # positive → hurts R incumbent
+
+    # Strength label
+    abs_dev = abs(deviation)
+    strength = next(label for threshold, label in _STRENGTH_LABELS if abs_dev < threshold)
+
+    # Who benefits
+    if strength == "neutral":
+        beneficiary = "no meaningful tilt"
+    elif deviation > 0:
+        beneficiary = f"{strength} headwind for R incumbents"
+    else:
+        beneficiary = f"{strength} tailwind for R incumbents"
+
+    return f"{fmt(value)} → {beneficiary}"
+
+
+# ---------------------------------------------------------------------------
 # FRED helpers
 # ---------------------------------------------------------------------------
 
@@ -88,7 +152,7 @@ def fetch_approval_rating(filepath, year=2026):
     df = df[
         (df["politician"] == "Donald Trump") &
         (df["population"].isin(["lv", "rv", "a"]))
-    ].copy()
+        ].copy()
 
     # Prefer lv > rv > a — keep best population per poll
     pop_priority = {"lv": 0, "rv": 1, "a": 2}
@@ -131,7 +195,8 @@ def fetch_approval_rating(filepath, year=2026):
         return
 
     weighted_approval = round(numerator / denominator, 2)
-    print(f"  {'PRES_APPROVAL':<25} {weighted_approval}")
+    interp = interpret_factor("PRES_APPROVAL", weighted_approval)
+    print(f"  {'PRES_APPROVAL':<25} {weighted_approval:<12}  {interp}")
 
     # Step 5 — store in DB
     con = get_connection()
@@ -166,7 +231,8 @@ def fetch_and_store_all():
                 ON CONFLICT(year, factor_name) DO UPDATE SET value = excluded.value
             """, (YEAR, factor_name, value))
 
-            print(f"  {factor_name:<25} {value}")
+            interp = interpret_factor(factor_name, value)
+            print(f"  {factor_name:<25} {value:<12}  {interp}")
 
         except Exception as e:
             print(f"  ERROR {factor_name}: {e}")

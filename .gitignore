@@ -1,0 +1,21 @@
+# — Secrets ————————————————————————————
+.env
+# — Generated data ——————————————————————
+db/
+*.db
+*.sqlite3
+# — Python runtime ———————————————————————
+__pycache__/
+*.py[cod]
+*.pyo
+# — Virtual environment ——————————————————
+venv/
+.venv/
+# — macOS ————————————————————————————————
+.DS_Store
+# — PyCharm ——————————————————————————————
+.idea/
+
+.junie/
+*.png
+*.jpg

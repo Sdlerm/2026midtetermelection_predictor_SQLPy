@@ -153,6 +153,8 @@ Six FRED indicators are each normalized to [0, 1] against their historical range
 
 These six scores are averaged into a single `climate_score` in [-1, +1], where positive favors Democrats (bad economy for the Republican White House incumbent).
 
+![img.png](img.png)
+
 ### Projection formula
 
 ```

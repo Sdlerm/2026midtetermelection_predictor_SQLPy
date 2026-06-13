@@ -15,13 +15,13 @@ NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
 # We invert the score for indicators where high = bad for incumbent
 # ---------------------------------------------------------------------------
 INDICATOR_RANGES = {
-    "UNEMPLOYMENT":       (3.5, 7.0),    # tightened — 10% is GFC territory, irrelevant now
-    "CPI_YOY":            (0.0, 7.0),    # tightened — 9% was 2022 peak, unlikely to return
-    "CONSUMER_SENTIMENT": (40.0, 90.0),  # widened floor — sentiment has been structurally lower post-pandemic
-    "REAL_DISPOSABLE_INC":(15000, 21000),# tightened to realistic 2020s range
-    "GDP_GROWTH":         (-2.0, 4.0),   # tightened — 5% growth isn't happening in this environment
-    "FED_FUNDS_RATE":     (0.0, 6.0),    # tightened — peak was 5.5%, not 8%
-    "PRES_APPROVAL":      (25.0, 69.0),  # keep as-is, historical range still valid
+    "UNEMPLOYMENT":       (3.5,   7.0),    # tightened — 10% is GFC territory, irrelevant now
+    "CPI_YOY":            (0.0,   5.0),    # 5% is modern crisis ceiling; 7% made 4%+ look neutral
+    "CONSUMER_SENTIMENT": (40.0,  90.0),   # 40 floor captures post-pandemic low; 100 ceiling unrealistic (index never reaches it)
+    "REAL_DISPOSABLE_INC":(16000, 21000),  # 15000 was pre-pandemic floor, 16000 more accurate for 2020s
+    "GDP_GROWTH":         (-2.0,   4.0),   # ±5% is outside the realistic 2020s envelope
+    "FED_FUNDS_RATE":     (0.0,   5.5),    # 5.5% was the actual cycle peak; 6% was never reached
+    "PRES_APPROVAL":      (25.0,  69.0),   # full historical range valid (Nixon low, post-9/11 Bush high)
 }
 
 # Direction: +1 means "higher value = worse economy = helps D challenger"
@@ -177,7 +177,9 @@ def predict_all_races(year=2026):
     for race_id, state in races:
         finalists = []
 
-        for party in ["D", "R"]:
+        state_parties = [p for (s, p) in nominees if s == state]
+
+        for party in state_parties:
             nominee_info = nominees.get((state, party))
             if not nominee_info:
                 continue
@@ -203,7 +205,7 @@ def predict_all_races(year=2026):
             adjustment = climate_adjustment(party, climate)
             projected = round(poll_avg + adjustment, 1)
             incumbent_party = nominee_info["incumbent_party"]
-            is_incumbent = (party == incumbent_party)
+            is_incumbent = (party == incumbent_party) # this is a simplification; in reality we should check if the incumbent is actually running for re-election, but we'll assume that if the incumbent's party is listed, then the nominee from that party is the incumbent for modeling purposes
             is_flip = False  # set after we know the winner
 
             finalists.append({
@@ -227,11 +229,12 @@ def predict_all_races(year=2026):
 
         # Flip detection — winner's party differs from incumbent party
         winner = finalists[0]
-        for f in finalists:
-            f["is_flip"] = (
-                    winner["party"] != f["incumbent_party"]
-                    and f["incumbent_party"] != ""
-                )
+        winner["is_flip"] = (
+                winner["party"] != winner["incumbent_party"]
+                and winner["incumbent_party"] != ""
+        )
+        for f in finalists[1:]:
+            f["is_flip"] = False
 
         results.extend(finalists)
 
@@ -251,6 +254,11 @@ def project_senate_control(predictions):
     # R holds 23, D holds 42 of the 65 not up
     SAFE_R = 23
     SAFE_D = 42
+    SEATS_UP_2026 = 35  # Class 2 seats; used to compute not_called correctly
+
+    # Independents who are expected to caucus with a major party if elected.
+    # Osborn (NE-I) has stated he would caucus with Democrats.
+    INDIE_CAUCUS = {"I": "D"}
 
     projected_r = SAFE_R
     projected_d = SAFE_D
@@ -266,7 +274,8 @@ def project_senate_control(predictions):
             continue
         seen_states.add(state)
 
-        if r["party"] == "R":
+        effective_party = INDIE_CAUCUS.get(r["party"], r["party"])
+        if effective_party == "R":
             projected_r += 1
         else:
             projected_d += 1
@@ -274,8 +283,9 @@ def project_senate_control(predictions):
         if r["is_flip"]:
             flips.append(r)
 
-    total = projected_r + projected_d
-    not_called = 100 - total  # states missing nominees etc.
+    # not_called = races we have nominees for but couldn't project (missing polls, etc.)
+    # Use seats up in 2026 as the denominator, not total senate seats (100).
+    not_called = SEATS_UP_2026 - len(seen_states)
 
     if projected_r > 50:
         control = "Republicans"

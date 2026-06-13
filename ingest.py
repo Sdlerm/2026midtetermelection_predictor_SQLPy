@@ -13,7 +13,10 @@ def upsert_pollster(cur, name, numeric_grade=None, partisan=None):
         credibility = float(numeric_grade) if pd.notna(numeric_grade) else 1.0
     except (ValueError, TypeError):
         credibility = 1.0
-    partisan_lean = "U" if str(partisan).strip() == "1" else None
+    # The partisan field can be "1", "DEM", "REP", or NaN.
+    # Any non-null value means the poll was sponsored by a partisan actor.
+    p = str(partisan).strip() if pd.notna(partisan) else ""
+    partisan_lean = p if p not in ("", "nan") else None
     cur.execute("""
         INSERT INTO pollsters (name, credibility, partisan_lean)
         VALUES (?, ?, ?)
@@ -57,7 +60,7 @@ def load_nyt_senate_polls(filepath, year=2026):
         (df["party"].isin(["DEM", "REP"])) &
         (df["candidate_name"] != "Don't know") &
         (df["candidate_name"] != "Someone else")
-    ].copy()
+        ].copy()
 
     # Prefer likely voters; fall back to registered voters, then all adults
     pop_priority = {"lv": 0, "rv": 1, "a": 2}
@@ -66,6 +69,19 @@ def load_nyt_senate_polls(filepath, year=2026):
     # For each poll_id + candidate, keep only the best population group
     df = df.sort_values("pop_rank")
     df = df.drop_duplicates(subset=["poll_id", "candidate_name"], keep="first")
+
+    # Some polls run multiple questions with different candidate fields (e.g. a 3-way
+    # and a 4-way ballot test) under the same poll_id.  After the population dedup above,
+    # the same candidate can still appear twice with different pct values from different
+    # question_ids.  Keep only the question with the most candidates — it is the most
+    # complete ballot test and gives the most realistic vote-share split.
+    if "question_id" in df.columns:
+        q_counts = df.groupby(["poll_id", "question_id"])["candidate_name"].transform("count")
+        df = df.copy()
+        df["_q_count"] = q_counts
+        df = df.sort_values(["poll_id", "_q_count"], ascending=[True, False])
+        df = df.drop_duplicates(subset=["poll_id", "candidate_name"], keep="first")
+        df = df.drop(columns=["_q_count"])
 
     # Normalize party to single letter
     df["party"] = df["party"].map({"DEM": "D", "REP": "R"})
