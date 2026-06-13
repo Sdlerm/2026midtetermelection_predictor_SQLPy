@@ -5,7 +5,7 @@ import csv
 from datetime import date
 from init_db import get_connection
 
-LAMBDA = 0.03        # recency decay — half-life ~23 days
+LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
 
