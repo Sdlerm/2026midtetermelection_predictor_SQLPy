@@ -94,14 +94,16 @@ def plot_seat_count():
     ax.barh(0, d_seats, color="#3a7abf", height=0.5, label=f"Democrat ({d_seats})")
     ax.barh(0, r_seats, color="#c0392b", height=0.5,
             left=d_seats, label=f"Republican ({r_seats})")
-    ax.barh(0, uncalled, color="#cccccc", height=0.5,
-            left=d_seats + r_seats, label=f"Unassigned ({uncalled})")
+    if uncalled > 0:
+        ax.barh(0, uncalled, color="#cccccc", height=0.5,
+                left=d_seats + r_seats, label=f"Unassigned ({uncalled})")
 
     ax.axvline(50, color="black", linewidth=1.2, linestyle="--", label="50-seat majority")
     ax.text(50, 0.29, "← VP\ntiebreak", ha="center", va="bottom", fontsize=6.5, color="black")
     ax.set_xlim(0, 100)
     ax.set_yticks([])
-    ax.set_xlabel(f"Projected seats  (D + R + unassigned = {total})")
+    xlabel = f"Projected seats  (D + R = {total})" if uncalled == 0 else f"Projected seats  (D + R + unassigned = {total})"
+    ax.set_xlabel(xlabel)
 
     title = f"Projected Senate: {control['control']}"
     if control["tiebreaker"]:

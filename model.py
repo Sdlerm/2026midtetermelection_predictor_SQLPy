@@ -284,10 +284,11 @@ def project_senate_control(predictions, nominees_state_count):
         if r["is_flip"]:
             flips.append(r)
 
-    # not_called = races within our model (nominees.csv) that couldn't be projected
-    # seats_remaining = all Class 2 seats not yet assigned to D or R (used by the seat chart so it sums to 100)
-    not_called      = nominees_state_count - len(seen_states)
-    seats_remaining = SEATS_UP_2026 - len(seen_states)
+    # Unpolled/untracked Class 2 seats (outside nominees.csv or lacking polls) are
+    # assumed Republican holds — safe red seats are the ones that go unpolled.
+    projected_r    += SEATS_UP_2026 - len(seen_states)
+    not_called      = 0
+    seats_remaining = 0
 
     if projected_r > 50:
         control = "Republicans"
