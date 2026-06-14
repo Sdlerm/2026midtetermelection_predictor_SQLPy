@@ -1,8 +1,6 @@
 # — Secrets ————————————————————————————
 .env
 # — Generated data ——————————————————————
-db/
-*.db
 *.sqlite3
 # — Python runtime ———————————————————————
 __pycache__/
