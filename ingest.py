@@ -123,8 +123,11 @@ def load_nyt_senate_polls(filepath, year=2026):
         def _name_matches(candidate_name, tokens):
             return any(tok in tokens for tok in str(candidate_name).lower().split())
 
-        def _pick_best_question(grp):
-            state = grp["state"].iloc[0]
+        # Use an explicit for-loop over groups instead of groupby().apply() —
+        # apply() with a Python function is severely slow in pandas 3.x due to
+        # per-group probing and concat overhead; iterating groups directly avoids it.
+        keep_idx = []
+        for (_, state), grp in df.groupby(["poll_id", "state"], sort=False):
             tokens = state_tokens.get(state, set())
             best_qid, best_score = None, (-1.0, -1)
             for qid, qdf in grp.groupby("question_id", sort=False):
@@ -135,13 +138,8 @@ def load_nyt_senate_polls(filepath, year=2026):
                 if score > best_score:
                     best_score = score
                     best_qid = qid
-            return grp[grp["question_id"] == best_qid]
-
-        df = (
-            df.groupby(["poll_id", "state"], group_keys=False)
-            .apply(_pick_best_question)
-            .reset_index(drop=True)
-        )
+            keep_idx.extend(grp.index[grp["question_id"] == best_qid].tolist())
+        df = df.loc[keep_idx].reset_index(drop=True)
 
     # Population dedup — after question selection so each candidate appears once per poll_id
     df = df.sort_values("pop_rank")
