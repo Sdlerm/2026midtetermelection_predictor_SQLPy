@@ -38,12 +38,10 @@ def load_predictions():
         winner_party = "D" if margin > 0 else "R"
         winner_data  = d if margin > 0 else r
 
-        dem_label = f"{'★ ' if d['winner'] else ''}{d['name']}"
-        rep_label = f"{'★ ' if r['winner'] else ''}{r['name']}"
-        if d["is_incumbent"]:
-            dem_label += " [inc]"
-        if r["is_incumbent"]:
-            rep_label += " [inc]"
+        d_party   = "D*" if d["is_incumbent"] else "D"
+        r_party   = "R*" if r["is_incumbent"] else "R"
+        dem_label = f"{'★ ' if d['winner'] else ''}{d_party} {d['name']}"
+        rep_label = f"{'★ ' if r['winner'] else ''}{r_party} {r['name']}"
 
         rows.append({
             "State":    state,
@@ -66,15 +64,17 @@ st.caption(f"Economic climate score: **{climate:+.3f}** ({direction}) · Adjustm
 
 # --- Senate control banner ---
 st.divider()
+_seat_line = (f"D: {control['D']} · R: {control['R']} · "
+              f"{control['seats_remaining']} unassigned · 100 total seats")
 if control["control"] == "Democrats":
-    st.success(f"🔵 Projected Senate control: **Democrats**  —  D: {control['D']} seats · R: {control['R']} seats · {control['not_called']} uncalled")
+    st.success(f"🔵 Projected Senate control: **Democrats**  —  {_seat_line}")
 elif control["control"] == "Republicans":
-    st.error(f"🔴 Projected Senate control: **Republicans**  —  R: {control['R']} seats · D: {control['D']} seats · {control['not_called']} uncalled")
+    st.error(f"🔴 Projected Senate control: **Republicans**  —  {_seat_line}")
 else:
-    st.warning(f"⚠️ Senate control unclear  —  D: {control['D']} · R: {control['R']} · {control['not_called']} uncalled")
+    st.warning(f"⚠️ Senate control unclear  —  {_seat_line}")
 
 if control["tiebreaker"]:
-    st.caption("50-50 tie — Vance tiebreaker gives Republicans control")
+    st.caption("50–50 tie — VP casts tiebreaking vote → Republicans control")
 
 # --- Flips summary ---
 if control["flips"]:
@@ -129,7 +129,9 @@ def color_margin(val):
         intensity = min(int(abs(val) * 12), 180)
         return f"background-color: rgba(192,57,43,{intensity/255:.2f})"
 
-styled = df.style.map(color_margin, subset=["Margin"])
+styled = (df.style
+            .map(color_margin, subset=["Margin"])
+            .format({"Margin": lambda v: f"{v:+.1f}"}))
 st.dataframe(styled, use_container_width=True, hide_index=True)
 
 st.divider()

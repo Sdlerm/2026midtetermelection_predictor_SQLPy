@@ -17,13 +17,14 @@ def plot_race_margins():
         if state not in seen:
             seen[state] = {}
         seen[state][r["party"]] = {
-            "projected":  r["projected"],
-            "is_flip":    r.get("is_flip", False),
-            "winner":     r.get("winner", False),
+            "projected":    r["projected"],
+            "name":         r["name"],
+            "is_flip":      r.get("is_flip", False),
+            "winner":       r.get("winner", False),
             "is_incumbent": r["is_incumbent"],
         }
 
-    states, margins, colors, flips = [], [], [], []
+    states, margins, colors, flips, y_labels = [], [], [], [], []
     for state, parties in sorted(seen.items()):
         d = parties.get("D")
         r = parties.get("R")
@@ -35,10 +36,15 @@ def plot_race_margins():
         margins.append(margin)
         colors.append("#3a7abf" if margin > 0 else "#c0392b")
         flips.append(winner_data["is_flip"])
+        d_lbl  = "D*" if d["is_incumbent"] else "D"
+        r_lbl  = "R*" if r["is_incumbent"] else "R"
+        d_last = d["name"].rsplit(" ", 1)[-1]
+        r_last = r["name"].rsplit(" ", 1)[-1]
+        y_labels.append(f"{state}  {d_lbl} {d_last} / {r_lbl} {r_last}")
 
-    combined = sorted(zip(states, margins, colors, flips),
+    combined = sorted(zip(states, margins, colors, flips, y_labels),
                       key=lambda x: x[1], reverse=True)
-    states, margins, colors, flips = zip(*combined)
+    states, margins, colors, flips, y_labels = zip(*combined)
 
     fig, ax = plt.subplots(figsize=(10, len(states) * 0.5 + 2))
     y = range(len(states))
@@ -54,7 +60,7 @@ def plot_race_margins():
                     color="#3a7abf" if margin > 0 else "#c0392b")
 
     ax.set_yticks(list(y))
-    ax.set_yticklabels(states, fontsize=9)
+    ax.set_yticklabels(y_labels, fontsize=7.5)
     ax.set_xlabel("D margin (positive = Dem leads)")
 
     # Control summary in title
@@ -89,16 +95,17 @@ def plot_seat_count():
     ax.barh(0, r_seats, color="#c0392b", height=0.5,
             left=d_seats, label=f"Republican ({r_seats})")
     ax.barh(0, uncalled, color="#cccccc", height=0.5,
-            left=d_seats + r_seats, label=f"Uncalled ({uncalled})")
+            left=d_seats + r_seats, label=f"Unassigned ({uncalled})")
 
-    ax.axvline(50, color="black", linewidth=1.2, linestyle="--", label="50 seat threshold")
+    ax.axvline(50, color="black", linewidth=1.2, linestyle="--", label="50-seat majority")
+    ax.text(50, 0.29, "← VP\ntiebreak", ha="center", va="bottom", fontsize=6.5, color="black")
     ax.set_xlim(0, 100)
     ax.set_yticks([])
-    ax.set_xlabel("Projected seats")
+    ax.set_xlabel(f"Projected seats  (D + R + unassigned = {total})")
 
     title = f"Projected Senate: {control['control']}"
     if control["tiebreaker"]:
-        title += " (Vance tiebreaker)"
+        title += "  (50–50 · R via VP tiebreak)"
     ax.set_title(title, fontweight="bold")
     ax.legend(loc="lower right", fontsize=8)
 
@@ -109,40 +116,65 @@ def plot_seat_count():
 
 
 def plot_vote_shares():
-    predictions, _, _ = predict_all_races()
+    predictions, _, nominees_count = predict_all_races()
 
     seen = {}
     for r in predictions:
         state = r["state"]
         if state not in seen:
             seen[state] = {}
-        seen[state][r["party"]] = r["projected"]
+        seen[state][r["party"]] = {
+            "projected":    r["projected"],
+            "name":         r["name"],
+            "is_incumbent": r["is_incumbent"],
+        }
 
-    states, d_pcts, r_pcts = [], [], []
-    for state, parties in sorted(seen.items()):
-        d = parties.get("D")
-        r = parties.get("R")
-        if d is None or r is None:
+    rows = []
+    for state in sorted(seen):
+        parties = seen[state]
+        d_key = "D" if "D" in parties else ("I" if "I" in parties else None)
+        if d_key is None or "R" not in parties:
             continue
-        states.append(state)
-        d_pcts.append(d)
-        r_pcts.append(r)
+        d_info = parties[d_key]
+        r_info = parties["R"]
+        margin = d_info["projected"] - r_info["projected"]
+        rows.append((state, d_key, d_info, r_info, margin))
 
-    combined = sorted(zip(states, d_pcts, r_pcts), key=lambda x: x[1], reverse=True)
-    states, d_pcts, r_pcts = zip(*combined)
+    rows.sort(key=lambda row: row[4], reverse=True)
 
-    x = range(len(states))
+    d_pcts = [row[2]["projected"] for row in rows]
+    r_pcts = [row[3]["projected"] for row in rows]
+    x = range(len(rows))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.bar([i - width/2 for i in x], d_pcts, width, color="#3a7abf", label="Democrat")
-    ax.bar([i + width/2 for i in x], r_pcts, width, color="#c0392b", label="Republican")
+    fig, ax = plt.subplots(figsize=(14, 7))
+    d_bars = ax.bar([i - width / 2 for i in x], d_pcts, width, color="#3a7abf", label="Democrat")
+    r_bars = ax.bar([i + width / 2 for i in x], r_pcts, width, color="#c0392b", label="Republican")
     ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, label="50% threshold")
 
+    ax.bar_label(d_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#1a4a7a")
+    ax.bar_label(r_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#8b0000")
+
+    for i, (_, d_key, d_info, r_info, margin) in enumerate(rows):
+        top = max(d_pcts[i], r_pcts[i])
+        sign = "+" if margin > 0 else ""
+        margin_str = f"{sign}{margin:.1f}{'D' if margin > 0 else 'R'}"
+        ax.text(i, top + 2.5, margin_str, ha="center", va="bottom", fontsize=6.5,
+                fontweight="bold", color="#3a7abf" if margin > 0 else "#c0392b")
+
+    x_labels = []
+    for state, d_key, d_info, r_info, _ in rows:
+        d_lbl  = "D*" if d_info["is_incumbent"] else d_key
+        r_lbl  = "R*" if r_info["is_incumbent"] else "R"
+        d_last = d_info["name"].rsplit(" ", 1)[-1]
+        r_last = r_info["name"].rsplit(" ", 1)[-1]
+        x_labels.append(f"{state}\n{d_lbl} {d_last}\n{r_lbl} {r_last}")
+
     ax.set_xticks(list(x))
-    ax.set_xticklabels(states, rotation=45, ha="right", fontsize=8)
+    ax.set_xticklabels(x_labels, fontsize=7)
     ax.set_ylabel("Projected vote share (%)")
-    ax.set_title("2026 Senate Projected Vote Shares", fontweight="bold")
+    ax.set_ylim(0, max(d_pcts + r_pcts) + 10)
+    ax.set_title("2026 Senate Projected Vote Shares  (* = incumbent)", fontweight="bold")
     ax.legend()
 
     plt.tight_layout()
