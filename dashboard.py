@@ -10,8 +10,8 @@ st.caption("Weighted polling average · Credibility × recency decay · Updates 
 
 @st.cache_data(ttl=300)
 def load_predictions():
-    predictions, climate = predict_all_races()
-    control = project_senate_control(predictions)
+    predictions, climate, nominees_count = predict_all_races()
+    control = project_senate_control(predictions, nominees_count)
 
     seen = {}
     for r in predictions:

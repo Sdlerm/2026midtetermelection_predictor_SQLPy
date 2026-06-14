@@ -8,8 +8,8 @@ import matplotlib.patches as mpatches
 from model import predict_all_races, project_senate_control
 
 def plot_race_margins():
-    predictions, _ = predict_all_races()
-    control = project_senate_control(predictions)
+    predictions, _, nominees_count = predict_all_races()
+    control = project_senate_control(predictions, nominees_count)
 
     seen = {}
     for r in predictions:
@@ -75,14 +75,14 @@ def plot_race_margins():
 
 
 def plot_seat_count():
-    predictions, _ = predict_all_races()
-    control = project_senate_control(predictions)
+    predictions, _, nominees_count = predict_all_races()
+    control = project_senate_control(predictions, nominees_count)
 
     fig, ax = plt.subplots(figsize=(7, 3))
 
     d_seats = control["D"]
     r_seats = control["R"]
-    uncalled = control["not_called"]
+    uncalled = control["seats_remaining"]  # all Class 2 seats not yet assigned; keeps bar total = 100
     total = d_seats + r_seats + uncalled
 
     ax.barh(0, d_seats, color="#3a7abf", height=0.5, label=f"Democrat ({d_seats})")
@@ -109,7 +109,7 @@ def plot_seat_count():
 
 
 def plot_vote_shares():
-    predictions, _ = predict_all_races()
+    predictions, _, _ = predict_all_races()
 
     seen = {}
     for r in predictions:

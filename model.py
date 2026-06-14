@@ -163,8 +163,9 @@ def load_nominees():
 # ---------------------------------------------------------------------------
 
 def predict_all_races(year=2026):
-    nominees     = load_nominees()
-    climate      = get_climate_score(year)
+    nominees            = load_nominees()
+    nominees_state_count = len({s for (s, _) in nominees})
+    climate             = get_climate_score(year)
 
     con = get_connection()
     cur = con.cursor()
@@ -238,12 +239,12 @@ def predict_all_races(year=2026):
 
         results.extend(finalists)
 
-    return results, climate
+    return results, climate, nominees_state_count
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-def project_senate_control(predictions):
+def project_senate_control(predictions, nominees_state_count):
     """
     Projects final Senate seat counts and which party controls the chamber.
 
@@ -254,7 +255,7 @@ def project_senate_control(predictions):
     # R holds 23, D holds 42 of the 65 not up
     SAFE_R = 23
     SAFE_D = 42
-    SEATS_UP_2026 = 35  # Class 2 seats; used to compute not_called correctly
+    SEATS_UP_2026 = 35  # Class 2 seats; used for seats_remaining (fills seat chart to 100)
 
     # Independents who are expected to caucus with a major party if elected.
     # Osborn (NE-I) has stated he would caucus with Democrats.
@@ -283,9 +284,10 @@ def project_senate_control(predictions):
         if r["is_flip"]:
             flips.append(r)
 
-    # not_called = races we have nominees for but couldn't project (missing polls, etc.)
-    # Use seats up in 2026 as the denominator, not total senate seats (100).
-    not_called = SEATS_UP_2026 - len(seen_states)
+    # not_called = races within our model (nominees.csv) that couldn't be projected
+    # seats_remaining = all Class 2 seats not yet assigned to D or R (used by the seat chart so it sums to 100)
+    not_called      = nominees_state_count - len(seen_states)
+    seats_remaining = SEATS_UP_2026 - len(seen_states)
 
     if projected_r > 50:
         control = "Republicans"
@@ -304,13 +306,14 @@ def project_senate_control(predictions):
         "R": projected_r,
         "D": projected_d,
         "not_called": not_called,
+        "seats_remaining": seats_remaining,
         "control": control,
         "tiebreaker": tiebreaker,
         "flips": flips,
     }
 
 if __name__ == "__main__":
-    predictions, climate = predict_all_races()
+    predictions, climate, nominees_count = predict_all_races()
 
     direction = "favors D" if climate > 0 else "favors R"
     print(f"Climate score: {climate:+.3f} ({direction})")
@@ -328,7 +331,7 @@ if __name__ == "__main__":
         print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  adj: {adj}  → {r['projected']}%{inc}{flip}")
 
     # Senate control projection
-    control = project_senate_control(predictions)
+    control = project_senate_control(predictions, nominees_count)
     print(f"\n{'─'*45}")
     print(f"  PROJECTED SENATE CONTROL: {control['control']}")
     if control['tiebreaker']:
