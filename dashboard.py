@@ -13,7 +13,7 @@ if _ctx() is None:
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from model import predict_all_races, project_senate_control, get_approval_score, ECON_WEIGHT, APPROVAL_WEIGHT
+from senate_model import predict_all_races, project_senate_control, get_approval_score, ECON_WEIGHT, APPROVAL_WEIGHT
 from charts import build_margins_fig, build_vote_shares_fig, build_seat_count_fig
 
 st.set_page_config(page_title="2026 Senate Predictor", layout="wide")

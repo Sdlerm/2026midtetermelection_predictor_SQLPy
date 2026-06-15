@@ -17,7 +17,7 @@ LEAN_ALPHA  = 0.8    # polls vs. state lean blend (0=lean only, 1=polls only)
 
 RUNOFF_STATES = {"GA"}   # general election runoff required if no candidate clears 50%
 
-NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
+NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 
 # ---------------------------------------------------------------------------
 # Historical ranges for normalization — based on postwar US data
@@ -397,7 +397,7 @@ def project_senate_control(predictions, nominees_state_count):
         if r["is_flip"]:
             flips.append(r)
 
-    # Unpolled/untracked Class 2 seats (outside nominees.csv or lacking polls) are
+    # Unpolled/untracked Class 2 seats (outside senate_nominees.csv or lacking polls) are
     # assumed Republican holds — safe red seats are the ones that go unpolled.
     projected_r    += SEATS_UP_2026 - len(seen_states)
     not_called      = 0

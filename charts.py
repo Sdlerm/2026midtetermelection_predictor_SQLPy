@@ -1,7 +1,7 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from model import predict_all_races, project_senate_control
+from senate_model import predict_all_races, project_senate_control
 
 try:
     import mplcursors
