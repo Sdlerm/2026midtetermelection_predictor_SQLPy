@@ -5,8 +5,18 @@ import csv
 from datetime import date
 from init_db import get_connection
 
+# Constants
+APPROVAL_WEIGHT = 0.15 # how much approval nudges the poll average;
+APPROVAL_LAMBDA = 0.0277 # half-life ~30 days t =
+APPROVAL_MIN_N = 400
+APPROVAL_CSV = os.path.join(os.path.dirname(__file__), "data", "president_approval_polls.csv")
+
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
+LEAN_ALPHA  = 0.8    # polls vs. state lean blend (0=lean only, 1=polls only)
+
+RUNOFF_STATES = {"GA"}   # general election runoff required if no candidate clears 50%
+
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
 
 # ---------------------------------------------------------------------------
@@ -35,6 +45,30 @@ INDICATOR_DIRECTION = {
     "FED_FUNDS_RATE":      1,   # high rates hurt incumbent (R)
     "PRES_APPROVAL":      -1,   # high approval helps incumbent (R) (direction -1 means that higher value is better for incumbent)
 }
+
+# ---------------------------------------------------------------------------
+# State partisan lean — average of 2020 and 2024 presidential D margins
+# Positive = D-leaning, negative = R-leaning
+# ---------------------------------------------------------------------------
+STATE_LEAN = {
+    "AK": -11.5,  "AR": -29.0,  "FL":  -8.0,  "GA":  -1.0,
+    "IA": -11.0,  "ID": -32.0,  "KS": -17.5,  "KY": -28.0,
+    "MA": +31.0,  "ME":  +8.0,  "MI":  +1.5,  "MN":  +5.0,
+    "MS": -18.5,  "MT": -18.5,  "NC":  -2.0,  "NE": -20.0,
+    "NH":  +5.0,  "OH": -10.0,  "SC": -13.5,  "SD": -27.5,
+    "TX": -10.0,  "VA":  +8.0,
+}
+
+# Independents who caucus with a major party for lean purposes
+INDIE_CAUCUS_LEAN = {"I": "D"}   # Osborn caucuses with Dems
+
+def lean_baseline(state, party):
+    lean       = STATE_LEAN.get(state, 0.0)
+    lean_party = INDIE_CAUCUS_LEAN.get(party, party)
+    if lean_party == "D":
+        return 50.0 + lean / 2
+    else:
+        return 50.0 - lean / 2
 
 # ---------------------------------------------------------------------------
 # Core math
@@ -124,6 +158,72 @@ def get_climate_score(year=2026):
     return round(sum(scores) / len(scores), 3)
 
 
+
+def get_approval_score():
+    """
+    Returns a weighted average presidential approval percentage.
+    Filters by population quality: LV preferred, then RV, then Adults.
+    Recency-decayed with a 25-day half-life.
+    """
+    import csv as _csv
+
+    def approval_recency_weight(date_str):
+        try:
+            from datetime import datetime
+            d = datetime.strptime(date_str.strip(), "%m/%d/%y").date()
+            days = (date.today() - d).days
+            return math.exp(-APPROVAL_LAMBDA * days)
+        except (ValueError, TypeError):
+            return 0.0
+
+    rows = []
+
+    with open(APPROVAL_CSV, newline="", encoding="utf-8") as f:
+        for row in _csv.DictReader(f):
+            pop  = row.get("population", "").strip().lower()
+            try:
+                yes  = float(row["yes"])
+                n    = float(row["sample_size"])
+                end  = row["end_date"].strip()
+            except (ValueError, KeyError):
+                continue
+            if pop in ("lv", "rv", "a") and n > 0:
+                rows.append({"pop": pop, "yes": yes, "n": n, "end": end})
+
+    # Tier selection: LV first, add RV if insufficient, add A if still insufficient
+    for tiers in (["lv"], ["lv", "rv"], ["lv", "rv", "a"]):
+        subset = [r for r in rows if r["pop"] in tiers]
+        total_n = sum(r["n"] for r in subset)
+        if total_n >= APPROVAL_MIN_N:
+            break
+
+    if not subset:
+        return None
+
+    numerator   = 0.0
+    denominator = 0.0
+    for r in subset:
+        w = r["n"] * approval_recency_weight(r["end"])
+        numerator   += r["yes"] * w
+        denominator += w
+
+    return round(numerator / denominator, 2) if denominator > 0 else None
+
+def approval_adjustment(party, approval_pct):
+    """
+    Converts presidential approval % into a per-candidate point adjustment.
+    50% approval = neutral.
+    Above 50% helps the incumbent party (R in 2026).
+    Below 50% hurts the incumbent party (R in 2026), helps D challenger.
+    """
+    score = (approval_pct - 50.0) / 50.0   # normalize to [-1, +1]
+    raw   = score * APPROVAL_WEIGHT * 10
+
+    if party == "D":
+        return round(-raw, 2)
+    else:
+        return round(raw, 2)
+
 def climate_adjustment(party, climate_score):
     """
     Converts a climate score into a percentage point adjustment for a candidate.
@@ -166,6 +266,7 @@ def predict_all_races(year=2026):
     nominees            = load_nominees()
     nominees_state_count = len({s for (s, _) in nominees})
     climate             = get_climate_score(year)
+    approval_pct       = get_approval_score()
 
     con = get_connection()
     cur = con.cursor()
@@ -203,8 +304,13 @@ def predict_all_races(year=2026):
             if poll_avg is None:
                 continue
 
-            adjustment = climate_adjustment(party, climate)
-            projected = round(poll_avg + adjustment, 1)
+            # AFTER:
+            adjustment   = climate_adjustment(party, climate)
+            appr_adj     = approval_adjustment(party, approval_pct) if approval_pct is not None else 0.0
+            baseline     = lean_baseline(state, party)
+            blended      = LEAN_ALPHA * poll_avg + (1 - LEAN_ALPHA) * baseline
+            projected    = round(blended + adjustment + appr_adj, 1)
+
             incumbent_party = nominee_info["incumbent_party"]
             is_incumbent = (party == incumbent_party) # this is a simplification; in reality we should check if the incumbent is actually running for re-election, but we'll assume that if the incumbent's party is listed, then the nominee from that party is the incumbent for modeling purposes
             is_flip = False  # set after we know the winner
@@ -214,7 +320,9 @@ def predict_all_races(year=2026):
                 "name": name,
                 "party": party,
                 "poll_avg": poll_avg,
+                "lean_baseline": round(baseline, 1),
                 "adjustment": adjustment,
+                "appr_adj": appr_adj,
                 "projected": projected,
                 "incumbent_party": incumbent_party,
                 "is_incumbent": is_incumbent,
@@ -236,6 +344,11 @@ def predict_all_races(year=2026):
         )
         for f in finalists[1:]:
             f["is_flip"] = False
+
+        # Runoff detection — winner leads but hasn't cleared 50% in a runoff state
+        runoff_likely = state in RUNOFF_STATES and winner["projected"] < 50.0
+        for f in finalists:
+            f["runoff_likely"] = runoff_likely
 
         results.extend(finalists)
 
@@ -316,9 +429,17 @@ def project_senate_control(predictions, nominees_state_count):
 if __name__ == "__main__":
     predictions, climate, nominees_count = predict_all_races()
 
+    approval_pct = get_approval_score()
+
     direction = "favors D" if climate > 0 else "favors R"
-    print(f"Climate score: {climate:+.3f} ({direction})")
-    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.1f}pp\n")
+    print(f"Climate score:   {climate:+.3f} ({direction})")
+    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.1f}pp")
+    if approval_pct is not None:
+        appr_pp = abs((approval_pct - 50) / 50 * APPROVAL_WEIGHT * 10)
+        print(f"Approval score:  {approval_pct}%  (adjustment: ±{appr_pp:.2f}pp)")
+    else:
+        print("Approval score:  unavailable")
+    print()
 
     current_state = None
     for r in predictions:
@@ -328,8 +449,12 @@ if __name__ == "__main__":
         marker  = "★" if r.get("winner") else " "
         inc     = " [incumbent]" if r["is_incumbent"] else ""
         flip    = " ⚡FLIP" if r.get("winner") and r["is_flip"] else ""
+        runoff  = " 🔄RUNOFF?" if r.get("winner") and r.get("runoff_likely") else ""
         adj     = f"{r['adjustment']:+.1f}pp"
-        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  adj: {adj}  → {r['projected']}%{inc}{flip}")
+        appr    = f"appr: {r['appr_adj']:+.2f}pp"                             # ← ADD
+        base    = f"lean: {r['lean_baseline']}%"
+        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  {base}  adj: {adj}  {appr}  → "
+              f"{r['projected']}%{inc}{flip}{runoff}")                         # ← CHANGE
 
     # Senate control projection
     control = project_senate_control(predictions, nominees_count)

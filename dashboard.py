@@ -1,8 +1,20 @@
+import sys
+
+# When invoked via `python dashboard.py`, re-launch under `streamlit run`
+try:
+    from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx as _ctx
+except ImportError:
+    from streamlit.runtime.scriptrunner import get_script_run_ctx as _ctx  # older streamlit
+
+if _ctx() is None:
+    import subprocess
+    raise SystemExit(subprocess.call(["streamlit", "run", __file__]))
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from model import predict_all_races, project_senate_control
+from model import predict_all_races, project_senate_control, get_approval_score, ECON_WEIGHT, APPROVAL_WEIGHT
 
 st.set_page_config(page_title="2026 Senate Predictor", layout="wide")
 st.title("🗳️ 2026 Senate Election Predictor")
@@ -21,11 +33,14 @@ def load_predictions():
         seen[state][r["party"]] = {
             "name":           r["name"],
             "poll_avg":       r["poll_avg"],
+            "lean_baseline":  r.get("lean_baseline"),
             "adjustment":     r["adjustment"],
+            "appr_adj":       r.get("appr_adj", 0.0),
             "pct":            r["projected"],
             "is_incumbent":   r["is_incumbent"],
             "is_flip":        r.get("is_flip", False),
             "winner":         r.get("winner", False),
+            "runoff_likely":  r.get("runoff_likely", False),
         }
 
     rows = []
@@ -52,15 +67,18 @@ def load_predictions():
             "Margin":   round(margin, 1),
             "Leader":   winner_party,
             "Flip":     "⚡" if winner_data["is_flip"] else "",
+            "Runoff":   "🔄" if winner_data.get("runoff_likely") else "",
         })
 
-    return pd.DataFrame(rows).sort_values("Margin", ascending=False), climate, control
+    approval_pct = get_approval_score()
+    return pd.DataFrame(rows).sort_values("Margin", ascending=False), climate, control, approval_pct
 
-df, climate, control = load_predictions()
+df, climate, control, approval_pct = load_predictions()
 
 # --- Economic climate caption ---
 direction = "favors Democrats" if climate > 0 else "favors Republicans"
-st.caption(f"Economic climate score: **{climate:+.3f}** ({direction}) · Adjustment: ±{abs(climate * 0.3 * 10):.1f}pp")
+appr_str = f" · Approval: {approval_pct}% (±{abs((approval_pct - 50) / 50 * APPROVAL_WEIGHT * 10):.2f}pp)" if approval_pct else ""
+st.caption(f"Economic climate score: **{climate:+.3f}** ({direction}) · Econ adj: ±{abs(climate * ECON_WEIGHT * 10):.1f}pp{appr_str}")
 
 # --- Senate control banner ---
 st.divider()
@@ -132,7 +150,7 @@ def color_margin(val):
 styled = (df.style
             .map(color_margin, subset=["Margin"])
             .format({"Margin": lambda v: f"{v:+.1f}"}))
-st.dataframe(styled, use_container_width=True, hide_index=True)
+st.dataframe(styled, width="stretch", hide_index=True)
 
 st.divider()
 
@@ -150,6 +168,8 @@ with c2:
 margin_label = f"+{abs(row['Margin'])} {'D' if row['Margin'] > 0 else 'R'}"
 if row["Flip"] == "⚡":
     st.caption("⚡ Projected flip from current party")
+if row.get("Runoff") == "🔄":
+    st.caption("🔄 Runoff likely — no candidate projected to clear 50%")
 st.progress(
     int(row["Dem %"]) / 100,
     text=f"Dem {row['Dem %']}% · Rep {row['Rep %']}% · Margin {margin_label}"
