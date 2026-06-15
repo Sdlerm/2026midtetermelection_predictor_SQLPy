@@ -13,8 +13,8 @@ if _ctx() is None:
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from model import predict_all_races, project_senate_control, get_approval_score, ECON_WEIGHT, APPROVAL_WEIGHT
+from charts import build_margins_fig, build_vote_shares_fig, build_seat_count_fig
 
 st.set_page_config(page_title="2026 Senate Predictor", layout="wide")
 st.title("🗳️ 2026 Senate Election Predictor")
@@ -71,9 +71,10 @@ def load_predictions():
         })
 
     approval_pct = get_approval_score()
-    return pd.DataFrame(rows).sort_values("Margin", ascending=False), climate, control, approval_pct
+    df = pd.DataFrame(rows).sort_values("Margin", ascending=False)
+    return df, climate, control, approval_pct, predictions
 
-df, climate, control, approval_pct = load_predictions()
+df, climate, control, approval_pct, predictions = load_predictions()
 
 # --- Economic climate caption ---
 direction = "favors Democrats" if climate > 0 else "favors Republicans"
@@ -113,26 +114,27 @@ col4.metric("Races tracked", len(df))
 
 st.divider()
 
-# --- Margin chart ---
+# --- Seat count chart ---
+st.subheader("Projected seat count")
+seat_fig = build_seat_count_fig(control)
+st.pyplot(seat_fig)
+plt.close(seat_fig)
+
+st.divider()
+
+# --- Race margins chart ---
 st.subheader("Race margins")
-fig, ax = plt.subplots(figsize=(10, len(df) * 0.45 + 1.5))
-colors = ["#3a7abf" if m > 0 else "#c0392b" for m in df["Margin"]]
-bars = ax.barh(df["State"], df["Margin"], color=colors, height=0.6)
+margins_fig, *_ = build_margins_fig(predictions, control)
+st.pyplot(margins_fig)
+plt.close(margins_fig)
 
-# Mark flips with a lightning bolt on the bar
-for i, (_, row) in enumerate(df.iterrows()):
-    if row["Flip"] == "⚡":
-        x = row["Margin"]
-        offset = 0.3 if x > 0 else -0.3
-        ax.text(x + offset, i, "⚡", va="center", fontsize=9)
+st.divider()
 
-ax.axvline(0, color="black", linewidth=0.8)
-ax.set_xlabel("D margin (positive = Dem leads)")
-d_patch = mpatches.Patch(color="#3a7abf", label="Dem leads")
-r_patch = mpatches.Patch(color="#c0392b", label="Rep leads")
-ax.legend(handles=[d_patch, r_patch])
-plt.tight_layout()
-st.pyplot(fig)
+# --- Vote share chart ---
+st.subheader("Projected vote shares")
+shares_fig, *_ = build_vote_shares_fig(predictions)
+st.pyplot(shares_fig)
+plt.close(shares_fig)
 
 st.divider()
 
