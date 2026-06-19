@@ -21,10 +21,13 @@ from senate_model import (
     get_approval_score,
     climate_adjustment,
     approval_adjustment,
+    swing_adjustment,
     LAMBDA,
     ECON_WEIGHT,
     APPROVAL_WEIGHT,
     LEAN_ALPHA,
+    SWING_RAW,
+    HOUSE_SWING_WEIGHT,
 )
 
 # ---------------------------------------------------------------------------
@@ -275,9 +278,10 @@ def predict_house_races(year=2026):
 
             clim_adj  = climate_adjustment(party, climate)
             appr_adj  = approval_adjustment(party, approval_pct) if approval_pct is not None else 0.0
+            swing_adj = swing_adjustment(party, SWING_RAW, HOUSE_SWING_WEIGHT)
             baseline  = _district_lean_baseline(state, district, party)
             blended   = LEAN_ALPHA * poll_avg + (1 - LEAN_ALPHA) * baseline
-            projected = round(blended + clim_adj + appr_adj, 1)
+            projected = round(blended + clim_adj + appr_adj + swing_adj, 1)
 
             is_incumbent = incumbency.get((state, district, name), False)
 
@@ -290,6 +294,7 @@ def predict_house_races(year=2026):
                 "lean_baseline": baseline,
                 "adjustment":    clim_adj,
                 "appr_adj":      appr_adj,
+                "swing_adj":     swing_adj,
                 "projected":     projected,
                 "is_incumbent":  is_incumbent,
                 "is_flip":       False,
@@ -392,12 +397,14 @@ if __name__ == "__main__":
         flip   = " ⚡FLIP" if r["winner"] and r["is_flip"] else ""
         print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  "
               f"lean: {r['lean_baseline']}%  adj: {r['adjustment']:+.1f}pp  "
-              f"appr: {r['appr_adj']:+.2f}pp  → {r['projected']}%{inc}{flip}")
+              f"appr: {r['appr_adj']:+.2f}pp  swing: {r['swing_adj']:+.2f}pp  "
+              f"→ {r['projected']}%{inc}{flip}")
 
     print(f"\n{'─'*50}")
     print(f"  PROJECTED HOUSE CONTROL: {control['control']}")
     print(f"  R: {control['R']}  D: {control['D']}")
     print(f"  Generic ballot swing from 2024: {control['seat_swing']:+d} seats toward "
           f"{'D' if control['seat_swing'] > 0 else 'R'}")
+    print(f"Election swing:  +{SWING_RAW:.1f}pp raw  (House ×{HOUSE_SWING_WEIGHT} = +{SWING_RAW*HOUSE_SWING_WEIGHT:.2f}pp toward D)")
     print(f"  Polled races called:  R {control['polled_R']}  D {control['polled_D']}")
     print(f"{'─'*50}")

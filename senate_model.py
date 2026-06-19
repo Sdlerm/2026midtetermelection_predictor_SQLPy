@@ -15,6 +15,13 @@ LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
 LEAN_ALPHA  = 0.8    # polls vs. state lean blend (0=lean only, 1=polls only)
 
+# Post-2024 election swing — Democratic overperformance vs. 2024 baseline,
+# blended from special elections + 2025 gubernatorials, expressed in raw
+# percentage points (positive = favors D). Updated by hand as new results land.
+SWING_RAW           = 10.4   # current observed median D overperformance (pp)
+HOUSE_SWING_WEIGHT  = 0.25   # House trusts 25% of raw swing (primary Tier-2 env signal)
+SENATE_SWING_WEIGHT = 0.10   # Senate muted: national env already in climate+approval
+
 RUNOFF_STATES = {"GA"}   # general election runoff required if no candidate clears 50%
 
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
@@ -239,6 +246,21 @@ def climate_adjustment(party, climate_score):
     else:
         return round(-raw, 2)  # inverse for R
 
+def swing_adjustment(party, swing_pp, weight):
+    """
+    Converts post-2024 election swing (in pp, D-positive) into a per-candidate
+    adjustment. Mirrors climate_adjustment's party-sign convention: D gets the
+    raw swing, all other parties get its inverse (independents treated as R,
+    consistent with the existing climate/approval handling — flagged for the
+    same future fix). Unlike climate_adjustment there is no ×10, because
+    swing_pp is already in percentage points, not a [-1,+1] score.
+    """
+    raw = swing_pp * weight
+    if party == "D":
+        return round(raw, 2)
+    else:
+        return round(-raw, 2)
+
 # ---------------------------------------------------------------------------
 # Nominees
 # ---------------------------------------------------------------------------
@@ -307,9 +329,10 @@ def predict_all_races(year=2026):
             # AFTER:
             adjustment   = climate_adjustment(party, climate)
             appr_adj     = approval_adjustment(party, approval_pct) if approval_pct is not None else 0.0
+            swing_adj    = swing_adjustment(party, SWING_RAW, SENATE_SWING_WEIGHT)
             baseline     = lean_baseline(state, party)
             blended      = LEAN_ALPHA * poll_avg + (1 - LEAN_ALPHA) * baseline
-            projected    = round(blended + adjustment + appr_adj, 1)
+            projected    = round(blended + adjustment + appr_adj + swing_adj, 1)
 
             incumbent_party = nominee_info["incumbent_party"]
             is_incumbent = (party == incumbent_party) # this is a simplification; in reality we should check if the incumbent is actually running for re-election, but we'll assume that if the incumbent's party is listed, then the nominee from that party is the incumbent for modeling purposes
@@ -323,6 +346,7 @@ def predict_all_races(year=2026):
                 "lean_baseline": round(baseline, 1),
                 "adjustment": adjustment,
                 "appr_adj": appr_adj,
+                "swing_adj": swing_adj,
                 "projected": projected,
                 "incumbent_party": incumbent_party,
                 "is_incumbent": is_incumbent,
@@ -440,6 +464,7 @@ if __name__ == "__main__":
     else:
         print("Approval score:  unavailable")
     print()
+    print(f"Election swing:  +{SWING_RAW:.1f}pp raw  (Senate ×{SENATE_SWING_WEIGHT} = +{SWING_RAW*SENATE_SWING_WEIGHT:.2f}pp toward D)")
 
     current_state = None
     for r in predictions:
@@ -451,10 +476,11 @@ if __name__ == "__main__":
         flip    = " ⚡FLIP" if r.get("winner") and r["is_flip"] else ""
         runoff  = " 🔄RUNOFF?" if r.get("winner") and r.get("runoff_likely") else ""
         adj     = f"{r['adjustment']:+.1f}pp"
-        appr    = f"appr: {r['appr_adj']:+.2f}pp"                             # ← ADD
+        appr    = f"appr: {r['appr_adj']:+.2f}pp"
+        swing   = f"swing: {r['swing_adj']:+.2f}pp"
         base    = f"lean: {r['lean_baseline']}%"
-        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  {base}  adj: {adj}  {appr}  → "
-              f"{r['projected']}%{inc}{flip}{runoff}")                         # ← CHANGE
+        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  {base}  adj: {adj}  {appr}  {swing}  → "
+              f"{r['projected']}%{inc}{flip}{runoff}")
 
     # Senate control projection
     control = project_senate_control(predictions, nominees_count)
