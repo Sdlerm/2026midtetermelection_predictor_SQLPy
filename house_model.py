@@ -108,11 +108,22 @@ def _weighted_average(race_id, candidate_id):
 
 
 def _district_lean_baseline(state, district, party):
+    """
+    D and R get a baseline derived from DISTRICT_LEAN, which is a two-party
+    (D-vs-R) measure of 2024 presidential margin — it has no meaningful
+    analog for a third candidate. Independents are given a neutral 50%
+    baseline instead of falling through to the R formula, since DISTRICT_LEAN
+    doesn't predict independent support and anchoring an independent's poll
+    average to the *opposing major party's* structural lean (the old
+    behavior) produced nonsensical, badly distorted projections.
+    """
     lean = DISTRICT_LEAN.get((state, district), 0.0)
     if party == "D":
         return round(50.0 + lean / 2, 1)
-    else:
+    elif party == "R":
         return round(50.0 - lean / 2, 1)
+    else:
+        return 50.0
 
 # ---------------------------------------------------------------------------
 # Generic ballot
@@ -168,11 +179,33 @@ def get_generic_ballot(year=2026):
 # Used for flip detection — the DB candidates table doesn't store incumbency.
 # ---------------------------------------------------------------------------
 
+def _split_names(raw):
+    """
+    Splits a nominees.csv field that may contain one name, or multiple
+    names joined by a comma (e.g. CA-style top-two primaries that send
+    two same-party candidates to the general: "Connie Chan, Scott Wiener").
+    Mirrors house_ingest.py's _split_names — kept local here since this
+    module reads house_nominees.csv independently for incumbency only.
+    """
+    raw = raw.strip()
+    if not raw:
+        return []
+    return [name.strip() for name in raw.split(",") if name.strip()]
+
+
 def _load_incumbency():
     """
     Returns dict (state, district, name) -> is_incumbent (bool).
     Reads house_nominees.csv directly — incumbency is editorial data,
     not something we derive from polls.
+
+    Incumbency convention: dem_incumbent / rep_incumbent indicate which
+    PARTY currently holds the seat, not which named individual. So when
+    a party's flag is 1, every nominee listed for that party is marked
+    incumbent — this matters for races like CA-11 and CA-14, where two
+    Democrats both advance to the general (top-two primary) and neither
+    is more "the" incumbent than the other; both count as incumbent-party
+    candidates for flip detection purposes.
     """
     import csv, os
     path = os.path.join(os.path.dirname(__file__), "data", "house_nominees.csv")
@@ -181,14 +214,21 @@ def _load_incumbency():
         for row in csv.DictReader(f):
             state    = row["state"].strip()
             district = row["district"].strip()
-            dem      = row.get("dem_nominee", "").strip()
-            rep      = row.get("rep_nominee", "").strip()
+            dem      = _split_names(row.get("dem_nominee", ""))
+            rep      = _split_names(row.get("rep_nominee", ""))
+            ind      = _split_names(row.get("ind_nominee", ""))
             d_inc    = row.get("dem_incumbent", "").strip() == "1"
             r_inc    = row.get("rep_incumbent", "").strip() == "1"
-            if dem:
-                inc[(state, district, dem)] = d_inc
-            if rep:
-                inc[(state, district, rep)] = r_inc
+            for name in dem:
+                inc[(state, district, name)] = d_inc
+            for name in rep:
+                inc[(state, district, name)] = r_inc
+            for name in ind:
+                # Independents are never the incumbent-party flag holder —
+                # no ind_incumbent column exists, and there isn't a case yet
+                # of an independent currently holding a House seat in this
+                # dataset's planned races.
+                inc[(state, district, name)] = False
     return inc
 
 # ---------------------------------------------------------------------------

@@ -29,12 +29,29 @@ HOUSE_NOMINEES_CSV = os.path.join(DATA_DIR, "house_nominees.csv")
 # Skips primaries and rows missing both nominees.
 # ---------------------------------------------------------------------------
 
+def _split_names(raw):
+    """
+    Splits a nominees.csv field that may contain one name, or multiple
+    names joined by a comma (e.g. CA's top-two jungle primary advances
+    two candidates from the same party: "Connie Chan, Scott Wiener").
+    Strips stray whitespace/tabs from each name. Returns a list (possibly
+    empty, possibly length 1, possibly length 2+).
+    """
+    raw = raw.strip()
+    if not raw:
+        return []
+    return [name.strip() for name in raw.split(",") if name.strip()]
+
+
 def _load_confirmed_nominees():
     """
     Returns a dict keyed by (state, district) whose values are
-    { 'D': name, 'R': name, 'I': name } for whichever parties are confirmed.
+    { 'D': [names], 'R': [names], 'I': [names] } for whichever parties
+    are confirmed. A party's list normally holds one name, but can hold
+    two or more when multiple same-party candidates advance to the
+    general (e.g. CA-style top-two primaries: CA-11, CA-14 for Democrats,
+    CA-40 for Republicans).
     Primary rows and fully-blank rows are skipped.
-    Names are stripped of stray whitespace/tabs.
     """
     confirmed = {}
     with open(HOUSE_NOMINEES_CSV, newline="", encoding="utf-8") as f:
@@ -43,9 +60,9 @@ def _load_confirmed_nominees():
                 continue
             state    = row["state"].strip()
             district = row["district"].strip()
-            dem      = row.get("dem_nominee", "").strip()
-            rep      = row.get("rep_nominee", "").strip()
-            ind      = row.get("ind_nominee", "").strip()
+            dem      = _split_names(row.get("dem_nominee", ""))
+            rep      = _split_names(row.get("rep_nominee", ""))
+            ind      = _split_names(row.get("ind_nominee", ""))
             if not dem and not rep and not ind:
                 continue
             entry = {}
@@ -68,11 +85,14 @@ def _build_nominee_lookup(confirmed):
     Inverts confirmed nominees dict into:
       candidate_name -> (state, district, party)
     Used to decide whether a poll row belongs to a confirmed general-election race.
+    Each party slot may hold multiple names (e.g. CA top-two primaries send
+    two same-party candidates to the general) — every name maps individually.
     """
     lookup = {}
     for (state, district), parties in confirmed.items():
-        for party, name in parties.items():
-            lookup[name] = (state, district, party)
+        for party, names in parties.items():
+            for name in names:
+                lookup[name] = (state, district, party)
     return lookup
 
 
