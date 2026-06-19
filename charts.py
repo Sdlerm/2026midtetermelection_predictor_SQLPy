@@ -2,6 +2,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from senate_model import predict_all_races, project_senate_control
+from house_model import predict_house_races, project_house_control
 
 try:
     import mplcursors
@@ -19,7 +20,7 @@ def _bar_labels(ax, bars, color, fontsize=7.5, offset=0.6):
             f"{h:.1f}%",
             ha="center", va="bottom",
             fontsize=fontsize, fontweight="bold", color=color,
-        )
+            )
 
 
 def _flip_direction(winner_party, incumbent_party):
@@ -112,6 +113,151 @@ def build_margins_fig(predictions, control):
 
     plt.tight_layout()
     return fig, bars, list(states), list(margins), list(flip_labels), list(y_labels)
+
+
+def build_house_margins_fig(results, control, top_n=None):
+    """
+    Same idea as build_margins_fig, but keyed on (state, district) instead
+    of state alone, and only covers the polled Tier-1 House races — the
+    ~375 unpolled seats aren't in `results` at all (no district-level data
+    exists for them), so they simply don't appear on this chart.
+
+    top_n: if set, only the top_n closest races are shown (most useful
+    when there are many races and the chart would otherwise be huge).
+    """
+    seen = {}
+    for r in results:
+        key = (r["state"], r["district"])
+        if key not in seen:
+            seen[key] = {}
+        seen[key][r["party"]] = {
+            "projected":       r["projected"],
+            "name":            r["name"],
+            "is_flip":         r.get("is_flip", False),
+            "winner":          r.get("winner", False),
+            "is_incumbent":    r["is_incumbent"],
+        }
+
+    rows = []
+    for (state, district), parties in seen.items():
+        d_key = "D" if "D" in parties else ("I" if "I" in parties else None)
+        if d_key is None or "R" not in parties:
+            continue
+        d = parties[d_key]
+        r = parties["R"]
+        margin = d["projected"] - r["projected"]
+        winner_data = d if margin > 0 else r
+
+        d_lbl  = f"{d_key}*" if d["is_incumbent"] else d_key
+        r_lbl  = "R*" if r["is_incumbent"] else "R"
+        d_last = d["name"].rsplit(" ", 1)[-1]
+        r_last = r["name"].rsplit(" ", 1)[-1]
+        label  = f"{state}-{district}  {d_lbl} {d_last} / {r_lbl} {r_last}"
+
+        rows.append((state, district, margin, winner_data["is_flip"], label, abs(margin)))
+
+    # Closest races first when top_n is set, otherwise sort by margin like Senate
+    if top_n:
+        rows.sort(key=lambda row: row[5])
+        rows = rows[:top_n]
+    rows.sort(key=lambda row: row[2], reverse=True)
+
+    if not rows:
+        fig, ax = plt.subplots(figsize=(8, 1.5))
+        ax.text(0.5, 0.5, "No polled House races available", ha="center", va="center")
+        ax.axis("off")
+        return fig, [], [], [], [], []
+
+    states_d, districts_d, margins, flips, y_labels = zip(*[(r[0], r[1], r[2], r[3], r[4]) for r in rows])
+
+    colors = ["#3a7abf" if m > 0 else "#c0392b" for m in margins]
+
+    fig, ax = plt.subplots(figsize=(11, len(rows) * 0.5 + 2))
+    y = range(len(rows))
+    bars = ax.barh(y, margins, color=colors, height=0.62)
+    ax.axvline(0, color="black", linewidth=0.9)
+
+    for i, (margin, is_flip) in enumerate(zip(margins, flips)):
+        if is_flip:
+            offset = 0.5 if margin > 0 else -0.5
+            ax.text(margin + offset, i, "FLIP", va="center",
+                    fontsize=7.5, fontweight="bold",
+                    color="#1a4a7a" if margin > 0 else "#7a0000")
+
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(y_labels, fontsize=8, fontweight="bold")
+    ax.set_xlabel("D / I margin  (positive = Dem / Ind leads)", fontsize=9, fontweight="bold")
+
+    n_shown = f" (closest {top_n})" if top_n else ""
+    title = (f"2026 House Race Margins{n_shown}\n"
+             f"Projected control: {control['control']}  "
+             f"(D: {control['D']}  R: {control['R']}  ·  "
+             f"generic ballot swing: {control['seat_swing']:+d} seats)")
+    ax.set_title(title, fontweight="bold", fontsize=11)
+
+    d_patch = mpatches.Patch(color="#3a7abf", label="Dem / Ind leads")
+    r_patch = mpatches.Patch(color="#c0392b", label="Rep leads")
+    ax.legend(handles=[d_patch, r_patch], loc="lower right", fontsize=9)
+
+    plt.tight_layout()
+    return fig, bars, list(states_d), list(margins), list(flips), list(y_labels)
+
+
+def build_house_seat_count_fig(control):
+    """
+    House version of build_seat_count_fig. Majority threshold is 218,
+    not 50 — there's no tiebreaker analog in the House.
+    """
+    fig, ax = plt.subplots(figsize=(8, 3.2))
+
+    d_seats = control["D"]
+    r_seats = control["R"]
+    total   = d_seats + r_seats  # House model always assigns all 435 seats
+
+    ax.barh(0, d_seats, color="#3a7abf", height=0.55, label=f"Dem / Ind ({d_seats})")
+    ax.barh(0, r_seats, color="#c0392b", height=0.55,
+            left=d_seats, label=f"Republican ({r_seats})")
+
+    ax.text(d_seats / 2, 0, str(d_seats), ha="center", va="center",
+            fontsize=16, fontweight="bold", color="white")
+    ax.text(d_seats + r_seats / 2, 0, str(r_seats), ha="center", va="center",
+            fontsize=16, fontweight="bold", color="white")
+
+    ax.axvline(218, color="black", linewidth=1.4, linestyle="--", label="218-seat majority")
+    ax.set_xlim(0, total)
+    ax.set_yticks([])
+    ax.set_xlabel(f"Projected seats  (D + R = {total})", fontsize=9, fontweight="bold")
+
+    title = f"Projected House: {control['control']}"
+    ax.set_title(title, fontweight="bold", fontsize=12)
+    ax.legend(loc="lower right", fontsize=9)
+
+    plt.tight_layout()
+    return fig
+
+
+def build_generic_ballot_fig(generic_ballot):
+    """Simple horizontal bar comparing national generic House ballot D vs R."""
+    d = generic_ballot.get("D")
+    r = generic_ballot.get("R")
+
+    fig, ax = plt.subplots(figsize=(7, 2.6))
+
+    if d is None or r is None:
+        ax.text(0.5, 0.5, "No generic ballot data available", ha="center", va="center")
+        ax.axis("off")
+        return fig
+
+    ax.barh(["Generic ballot"], [d], color="#3a7abf", height=0.5, label=f"Dem {d}%")
+    ax.barh(["Generic ballot"], [r], color="#c0392b", height=0.5, left=[d], label=f"Rep {r}%")
+    ax.set_xlim(0, d + r)
+    ax.set_xlabel("Share of two-party preference (%)", fontsize=9, fontweight="bold")
+    ax.set_title(f"National Generic House Ballot  (margin: {d - r:+.1f}pp)",
+                 fontweight="bold", fontsize=11)
+    ax.legend(loc="lower right", fontsize=8)
+
+    plt.tight_layout()
+    return fig
 
 
 def build_vote_shares_fig(predictions):
@@ -321,7 +467,52 @@ def plot_vote_shares():
     print("Saved to vote_shares.png")
 
 
+def plot_house_margins():
+    _use_interactive_backend()
+    results, generic_ballot, _, _ = predict_house_races()
+    control = project_house_control(results, generic_ballot)
+    fig, bars, states, margins, flips, y_labels = build_house_margins_fig(results, control)
+
+    if _HAS_MPLCURSORS and bars:
+        cursor = mplcursors.cursor(bars, hover=True)
+
+        @cursor.connect("add")
+        def _hover(sel):
+            i = sel.index
+            lbl = f"{y_labels[i]}\nMargin: {margins[i]:+.1f}"
+            if flips[i]:
+                lbl += "\nFLIP"
+            sel.annotation.set_text(lbl)
+            sel.annotation.get_bbox_patch().set(fc="lightyellow", alpha=0.9)
+
+    plt.savefig("house_margins.png", dpi=150)
+    plt.show(block=True)
+    print("Saved to house_margins.png")
+
+
+def plot_house_seat_count():
+    _use_interactive_backend()
+    results, generic_ballot, _, _ = predict_house_races()
+    control = project_house_control(results, generic_ballot)
+    build_house_seat_count_fig(control)
+    plt.savefig("house_seat_count.png", dpi=150)
+    plt.show(block=True)
+    print("Saved to house_seat_count.png")
+
+
+def plot_generic_ballot():
+    _use_interactive_backend()
+    _, generic_ballot, _, _ = predict_house_races()
+    build_generic_ballot_fig(generic_ballot)
+    plt.savefig("generic_ballot.png", dpi=150)
+    plt.show(block=True)
+    print("Saved to generic_ballot.png")
+
+
 if __name__ == "__main__":
     plot_race_margins()
     plot_seat_count()
     plot_vote_shares()
+    plot_house_margins()
+    plot_house_seat_count()
+    plot_generic_ballot()
