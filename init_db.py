@@ -4,23 +4,44 @@ import os
 DB_PATH = os.path.join(os.path.dirname(__file__), "db", "elections.db")
 
 def get_connection():
+    """
+    Establishes and returns a connection to the SQLite database.
+
+    This function ensures that the directory structure for the database file
+    exists by creating the necessary directories if they are missing. It then
+    establishes and returns a connection to the SQLite database located at
+    the path specified by `DB_PATH`.
+
+    :return: A connection object to the SQLite database.
+    :rtype: sqlite3.Connection
+    """
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
 def init_db():
     """
-    Initialize the database by creating necessary tables if they do not already exist.
+    Initializes the database with the required schema.
 
-    Schema structure:
-    - pollsters: Polling organizations with credibility score and partisan lean.
-    - races: One row per (year, state, district).
-        district = '' for Senate races (one per state).
-        district = '1', '2', ... for House races.
-        UNIQUE(year, state, district) enforces no duplicates.
-    - candidates: Candidates per race, linked by race_id.
-    - polls: Individual poll entries, linked to race/candidate/pollster.
-    - climate_factors: Economic/approval indicators by year.
-    - historical_results: Actual election outcomes for backtesting.
+    This function establishes a connection to the database and creates the following
+    tables if they do not already exist:
+    - pollsters: Stores information about polling organizations, their names, credibility scores,
+      and any partisan leanings.
+    - races: Represents different election races, including year, state, district, and whether
+      the race is marked as competitive.
+    - candidates: Holds data about candidates in specific races, including their names,
+      political parties, and whether they are incumbents.
+    - polls: Contains information about polls conducted for specific races and candidates,
+      including pollster details, poll dates, sample sizes, and percentage results.
+    - climate_factors: Stores various external factors (e.g., economic indicators) for
+      particular years and their associated values.
+    - historical_results: Records the results of past races, indicating which candidates won
+      and their vote shares.
+
+    This function ensures the schema exists and matches the defined structure.
+
+    :raises: No explicit exceptions are raised in this function, but any database-related
+             errors may occur based on the environment or integrity constraints.
+    :return: None
     """
     con = get_connection()
     cur = con.cursor()

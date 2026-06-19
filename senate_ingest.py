@@ -159,6 +159,38 @@ def load_nyt_senate_polls(filepath, year=2026):
     print(f"Loaded {loaded} Senate poll entries from {filepath}")
 
 
+def _wipe_senate_data():
+    """
+    Removes all Senate rows from polls, candidates, and races.
+    Senate races are identified by district='' AND state != 'US' — the same
+    discriminator house_ingest.py's _wipe_house_data() uses, just inverted.
+
+    NOTE: this is currently an unconditional wipe of ALL races matching that
+    filter, which today means "all Senate races" since House always sets a
+    non-empty district or state='US'. If a future data source ever needs a
+    third category that also satisfies district='' and state != 'US', this
+    will need a more specific marker (e.g. a chamber column) to stay scoped.
+    """
+    con = get_connection()
+    cur = con.cursor()
+
+    cur.execute("""
+        SELECT id FROM races
+        WHERE district = '' AND state != 'US'
+    """)
+    senate_race_ids = [r[0] for r in cur.fetchall()]
+
+    if senate_race_ids:
+        placeholders = ",".join("?" * len(senate_race_ids))
+        cur.execute(f"DELETE FROM polls      WHERE race_id IN ({placeholders})", senate_race_ids)
+        cur.execute(f"DELETE FROM candidates WHERE race_id IN ({placeholders})", senate_race_ids)
+        cur.execute(f"DELETE FROM races      WHERE id      IN ({placeholders})", senate_race_ids)
+
+    con.commit()
+    con.close()
+    print(f"Cleared {len(senate_race_ids)} Senate race(s) from DB.")
+
+
 def load_climate_factors(filepath):
     df = pd.read_csv(filepath)
     df.columns = df.columns.str.strip()
@@ -189,14 +221,7 @@ if __name__ == "__main__":
     if not os.path.exists(senate_path):
         print(f"ERROR: {senate_path} not found.")
     else:
-        con = get_connection()
-        cur = con.cursor()
-        cur.execute("DELETE FROM polls")
-        cur.execute("DELETE FROM candidates")
-        cur.execute("DELETE FROM races")
-        con.commit()
-        con.close()
-        print("Cleared old poll data.")
+        _wipe_senate_data()
 
         load_nyt_senate_polls(senate_path)
 
