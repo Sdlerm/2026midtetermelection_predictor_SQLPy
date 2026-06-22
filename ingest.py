@@ -54,7 +54,24 @@ def upsert_candidate(cur, race_id, name, party):
 # ---------------------------------------------------------------------------
 
 def _build_state_tokens(nominees_path):
-    """Build a dict mapping state abbrev -> set of lowercase name tokens from nominees.csv."""
+    """
+    Build a dictionary of state tokens from a CSV file containing nominee data.
+
+    The function reads a CSV file specified by the given path, processes the data
+    to generate a dictionary where each key is a state (in uppercase) and the
+    corresponding value is a set of unique tokens derived from the names of
+    nominees associated with that state. Tokens shorter than or equal to two
+    characters are excluded.
+
+    Parameters:
+        nominees_path (str): Path to the CSV file containing nominee data.
+                             The file is expected to have 'state' and 'name'
+                             columns.
+
+    Returns:
+        dict: A dictionary mapping state names (str, in uppercase) to sets of
+              tokens (set of str) extracted from nominee names.
+    """
     ndf = pd.read_csv(nominees_path)
     ndf["state"] = ndf["state"].astype(str).str.strip().str.upper()
     state_tokens = {}

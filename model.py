@@ -41,6 +41,17 @@ INDICATOR_DIRECTION = {
 # ---------------------------------------------------------------------------
 
 def days_ago(poll_date_str):
+    """
+    Calculates the number of days elapsed since a given date.
+    The function computes the difference in days between the current date and a date
+    provided in ISO format (YYYY-MM-DD).
+    Args:
+        poll_date_str (str): The date in ISO format (YYYY-MM-DD) to calculate the difference from.
+    Returns:
+        int: The number of days between the provided date and today's date.
+    Raises (this refers to when function... ):
+        ValueError: If the provided date string is not in a valid ISO format.
+    """
     poll_date = date.fromisoformat(poll_date_str)
     return (date.today() - poll_date).days
 
@@ -48,6 +59,19 @@ def recency_weight(poll_date_str):
     return math.exp(-LAMBDA * days_ago(poll_date_str))
 
 def weighted_average(race_id, candidate_id):
+    """
+    Calculates the weighted average percentage for a candidate in a given race using
+    poll data. The weighting considers both poll credibility and recency.
+    Parameters:
+    race_id: int
+        The identifier for the race in which the candidate is competing.
+    candidate_id: int
+        The identifier for the candidate whose weighted average is being calculated.
+    Returns:
+    float or None
+        The weighted average percentage rounded to one decimal place if data exists,
+        otherwise None.
+    """
     con = get_connection()
     cur = con.cursor()
     cur.execute("""
@@ -144,6 +168,21 @@ def climate_adjustment(party, climate_score):
 # ---------------------------------------------------------------------------
 
 def load_nominees():
+    """
+    Loads nominees' data from a CSV file and organizes it into a dictionary.
+
+    The function reads data from a predefined CSV file containing information about
+    state nominees, including their state, party affiliation, name, and optionally
+    the incumbent party. The data is cleaned and stored in a dictionary where the
+    keys are tuples of state and party, and the values are dictionaries containing
+    the nominee's name and the incumbent party (if provided).
+
+    Returns:
+        dict: A dictionary where keys are tuples (state: str, party: str) and
+        values are dictionaries with keys:
+            - "name" (str): Name of the nominee
+            - "incumbent_party" (str): Incumbent party of the nominee or an empty string
+    """
     nominees = {}
     with open(NOMINEES_PATH, newline="") as f:
         for row in csv.DictReader(f):
@@ -163,6 +202,27 @@ def load_nominees():
 # ---------------------------------------------------------------------------
 
 def predict_all_races(year=2026):
+    """
+    Predict race outcomes for a given year based on polling data and climate-adjusted projections.
+
+    This function analyzes electoral races for the specified year, evaluates nominees' standings
+    through weighted polling averages, and applies climate-based adjustments. The method determines
+    winners, identifies flips (when a party differs from the incumbent's), and returns detailed results
+    with relevant projections. Only state-level races are considered, excluding 'US' as a state.
+
+    Args:
+        year (int, optional): The year for which races will be evaluated. Defaults to 2026.
+
+    Returns:
+        tuple: A tuple containing three elements:
+            - list[dict]: A list of dictionaries, with each dictionary representing a race participant and
+              their attributes, including final projections, incumbency status, and whether their party represents a flip.
+            - float: The climate score used for adjustment purposes.
+            - int: The count of unique states available in the nominee dataset.
+
+    Raises:
+        None directly raised by this function; exceptions may propagate from database operations or auxiliary utility functions.
+    """
     nominees            = load_nominees()
     nominees_state_count = len({s for (s, _) in nominees})
     climate             = get_climate_score(year)
