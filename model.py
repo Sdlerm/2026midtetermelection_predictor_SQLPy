@@ -4,7 +4,6 @@ import os
 import csv
 from datetime import date
 
-from dashboard import margin_label
 from init_db import get_connection
 
 # ---------------------------------------------------------------------------
@@ -69,6 +68,24 @@ def days_ago(poll_date_str):
     return (date.today() - poll_date).days
 
 def recency_weight(poll_date_str):
+    """
+    Computes a weight based on the recency of a given poll date.
+
+    This function calculates a weight for a given poll date string using an
+    exponential decay formula. The weight decreases as the poll date becomes
+    further in the past. The decay rate is determined by a constant value, LAMBDA.
+
+    Args:
+        poll_date_str: A string representing the date of the poll in a
+                       recognized format (e.g., "YYYY-MM-DD").
+
+    Returns:
+        float: The computed weight, which lies between 0 and 1, based on how
+               recent the poll date is.
+
+    Raises:
+        ValueError: If the provided poll_date_str is invalid or cannot be parsed.
+    """
     return math.exp(-LAMBDA * days_ago(poll_date_str))
 
 def weighted_average(race_id, candidate_id):
@@ -178,7 +195,23 @@ def climate_adjustment(party, climate_score):
 
 def load_state_lean():
     """
-    Loads state lean data (as dem_margin) from a CSV file (state_lean.csv) and returns it as a dictionary.
+    Loads and parses state lean data from a CSV file and returns it as a dictionary.
+
+    This function reads a CSV file located at the path defined by STATE_LEAN_PATH.
+    It processes the data to extract state abbreviations and their corresponding
+    Democratic margins, converting them into a dictionary where the state serves
+    as the key and the Democratic lean margin as the value.
+
+    Raises:
+    FileNotFoundError
+        If the file specified by STATE_LEAN_PATH does not exist.
+    csv.Error
+        If there's an error parsing the CSV file.
+
+    Returns:
+    dict[str, float]
+        A dictionary mapping state abbreviations (uppercase) to their corresponding
+        Democratic margin values as floats.
     """
     lean = {}
     with open(STATE_LEAN_PATH, newline="") as f:
@@ -313,7 +346,12 @@ def predict_all_races(year=2026):
                 continue
 
             adjustment = climate_adjustment(party, climate)
-            projected = round(poll_avg + adjustment, 1)
+
+            lean = lean_baseline(state, party, state_lean)
+            blended = LEAN_ALPHA*poll_avg + (1-LEAN_ALPHA)*lean
+            projected = round(blended + adjustment, 1)
+            #projected = round(poll_avg + adjustment, 1)
+
             incumbent_party = nominee_info["incumbent_party"]
             is_incumbent = (party == incumbent_party) # this is a simplification; in reality we should check if the incumbent is actually running for re-election, but we'll assume that if the incumbent's party is listed, then the nominee from that party is the incumbent for modeling purposes
             is_flip = False  # set after we know the winner
@@ -323,6 +361,7 @@ def predict_all_races(year=2026):
                 "name": name,
                 "party": party,
                 "poll_avg": poll_avg,
+                "lean": round(lean, 1),
                 "adjustment": adjustment,
                 "projected": projected,
                 "incumbent_party": incumbent_party,
@@ -434,7 +473,7 @@ if __name__ == "__main__":
         inc     = " [incumbent]" if r["is_incumbent"] else ""
         flip    = " ⚡FLIP" if r.get("winner") and r["is_flip"] else ""
         adj     = f"{r['adjustment']:+.1f}pp"
-        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  adj: {adj}  → {r['projected']}%{inc}{flip}")
+        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  lean: {r['lean']}%  adj: {adj}  → {r['projected']}%{inc}{flip}")
 
     # Senate control projection
     control = project_senate_control(predictions, nominees_count)
