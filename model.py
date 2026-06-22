@@ -3,11 +3,24 @@ import math
 import os
 import csv
 from datetime import date
+
+from dashboard import margin_label
 from init_db import get_connection
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+LEAN_ALPHA = 0.8    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
+STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
+
+
+
+# Independents who are expected to caucus with a major party if elected.
+# Osborn (NE-I) has stated he would caucus with Democrats.
+INDIE_CAUCUS = {"I": "D"}
 
 # ---------------------------------------------------------------------------
 # Historical ranges for normalization — based on postwar US data
@@ -163,6 +176,40 @@ def climate_adjustment(party, climate_score):
     else:
         return round(-raw, 2)  # inverse for R
 
+def load_state_lean():
+    """
+    Loads state lean data (as dem_margin) from a CSV file (state_lean.csv) and returns it as a dictionary.
+    """
+    lean = {}
+    with open(STATE_LEAN_PATH, newline="") as f:
+        for row in csv.DictReader(f):
+            state = row["state"].strip().upper()
+            margin = row["dem_margin"].strip()
+            if state and margin:
+                lean[state] = float(margin)
+    return lean
+
+def lean_baseline(state, party, state_lean):
+    """
+    Structural baseline as a vote-share %, derived from the stored signed margin.
+    margin = dem_share - rep_share = dem_share - (100 - dem_share) = 2*dem_share - 100,
+    so dem_share = margin/2 + 50
+    """
+    margin = state_lean.get(state)
+    if margin is None:
+        return 50.0 # Unknown state: neutral, no structural pull
+
+    dem_share = 50.0 + margin/2.0
+    rep_share = 50.0 - margin/2.0
+
+    if party == "D":
+        return dem_share
+    if party == "R":
+        return rep_share
+    # Independent candidates: if they caucus with the democrats, receive dem_share; else they receive rep_share
+    return dem_share if INDIE_CAUCUS.get(party) == "D" else rep_share
+
+
 # ---------------------------------------------------------------------------
 # Nominees
 # ---------------------------------------------------------------------------
@@ -224,8 +271,10 @@ def predict_all_races(year=2026):
         None directly raised by this function; exceptions may propagate from database operations or auxiliary utility functions.
     """
     nominees            = load_nominees()
+    state_lean          = load_state_lean()
     nominees_state_count = len({s for (s, _) in nominees})
     climate             = get_climate_score(year)
+
 
     con = get_connection()
     cur = con.cursor()
@@ -316,10 +365,6 @@ def project_senate_control(predictions, nominees_state_count):
     SAFE_R = 23
     SAFE_D = 42
     SEATS_UP_2026 = 35  # Class 2 seats; used for seats_remaining (fills seat chart to 100)
-
-    # Independents who are expected to caucus with a major party if elected.
-    # Osborn (NE-I) has stated he would caucus with Democrats.
-    INDIE_CAUCUS = {"I": "D"}
 
     projected_r = SAFE_R
     projected_d = SAFE_D
