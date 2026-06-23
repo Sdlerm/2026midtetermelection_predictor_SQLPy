@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from model import predict_all_races, project_senate_control
+from senate_model import predict_all_races, project_senate_control
 
 st.set_page_config(page_title="2026 Senate Predictor", layout="wide")
 st.title("🗳️ 2026 Senate Election Predictor")

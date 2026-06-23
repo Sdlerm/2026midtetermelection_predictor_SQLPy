@@ -5,9 +5,27 @@ except Exception:
     matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from model import predict_all_races, project_senate_control
+from senate_model import predict_all_races, project_senate_control
 
 def plot_race_margins():
+    """
+    Generate a horizontal bar plot visualizing the projected vote margins
+    for Senate races by state, along with additional information such as
+    incumbency and potential party flips.
+
+    This function processes projection data, calculates the vote margins
+    for each race, and creates a sorted horizontal bar chart displaying
+    these margins. The chart indicates party control via color codes and
+    highlights flipped states. It also displays a summary of projected
+    Senate control in the chart title, and the final plot is saved as an
+    image.
+
+    Returns
+    -------
+    None
+        The function generates a visual plot, saves it as an image file,
+        and displays it; does not return any value.
+    """
     predictions, _, nominees_count = predict_all_races()
     control = project_senate_control(predictions, nominees_count)
 
@@ -81,6 +99,23 @@ def plot_race_margins():
 
 
 def plot_seat_count():
+    """
+    Plots a horizontal bar chart representing the projected seat count in the Senate based on predicted race outcomes.
+
+    The chart demonstrates the number of seats held by Democrats, Republicans, and unassigned seats,
+    providing a visual representation of the Senate's current or predicted balance of power. Additional
+    elements in the chart include a dashed line at the 50-seat majority mark, annotations for the Vice President's
+    tiebreaker, and dynamic adjustments to labels and titles depending on the data.
+
+    Raises:
+        None
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     predictions, _, nominees_count = predict_all_races()
     control = project_senate_control(predictions, nominees_count)
 
@@ -118,6 +153,24 @@ def plot_seat_count():
 
 
 def plot_vote_shares():
+    """
+    Plots the projected vote shares for the 2026 Senate races and saves the visualization as
+    a PNG image.
+
+    This function retrieves predictions for all races, processes them to extract vote share
+    data by state and party, and generates a visual bar chart comparing the projected vote
+    shares for major parties (Democrat and Republican) across states. Incumbents are indicated
+    on the chart with an asterisk.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    Exception
+        If the function fails during prediction retrieval or while plotting the graph.
+    """
     predictions, _, nominees_count = predict_all_races()
 
     seen = {}

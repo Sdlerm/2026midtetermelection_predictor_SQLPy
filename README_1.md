@@ -88,7 +88,7 @@ Creates `db/elections.db` with all tables. Safe to re-run; existing data is pres
 ### Step 2 — Load polling data
 
 ```bash
-python ingest.py
+python senate_ingest.py
 ```
 
 Clears old poll data and reloads from `data/senate.csv`. Also loads `data/climate.csv` if present.
@@ -112,7 +112,7 @@ Pulls the six FRED indicators and stores them in the `climate_factors` table. Re
 ### Step 4 — Run predictions (terminal output)
 
 ```bash
-python model.py
+python senate_model.py
 ```
 
 Prints each state's projected vote shares, the economic climate score, and which candidate is projected to lead.

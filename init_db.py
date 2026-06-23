@@ -4,10 +4,55 @@ import os
 DB_PATH = os.path.join(os.path.dirname(__file__), "db", "elections.db")
 
 def get_connection():
+    """
+    Establishes a connection to the SQLite database specified by DB_PATH.
+
+    Summary:
+    This function ensures the directory for the database file exists by creating
+    it if necessary. It then establishes and returns a connection to the SQLite
+    database located at the path defined by the DB_PATH constant.
+
+    Raises:
+    OSError: If the directory creation fails due to an underlying OS error.
+    sqlite3.Error: If the connection to the SQLite database cannot be established.
+
+    Returns:
+    sqlite3.Connection: An object representing the connection to the SQLite
+    database.
+    """
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
 def init_db():
+    """
+    Initializes the database by creating necessary tables if they do not already exist.
+
+    This function connects to the database, uses an SQL script to create tables, ensuring
+    the database structure accommodates pollsters, races, candidates, polls, climate factors,
+    and historical election results. Primary and foreign key constraints are defined to enforce
+    proper relationships between tables.
+
+    Attributes Initialized in the Database:
+    - pollsters: Stores pollster information including name, credibility, and partisan lean.
+    - races: Represents electoral races with details such as year, state, and competitiveness.
+    - candidates: Holds candidate information, linked to races and includes data on party
+      affiliation and incumbency.
+    - polls: Captures poll data including pollster, associated race, candidate details,
+      and polling statistics.
+    - climate_factors: Contains general election climate information such as presidential
+      approval or generic party ballot trends.
+    - historical_results: Stores outcomes of races, linking candidates to vote shares and
+      win status.
+
+    Raises:
+    - Any errors encountered during the execution of the SQL script or database connection
+      management will propagate and must be handled by the caller.
+
+    Important:
+    - Only tables listed in the SQL script are created or checked for existence.
+    - Assumes the database file path is correctly configured in the calling environment
+      (e.g., via DB_PATH constant).
+    """
     con = get_connection()
     cur = con.cursor()
 

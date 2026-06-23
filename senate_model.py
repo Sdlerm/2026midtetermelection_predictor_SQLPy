@@ -12,7 +12,7 @@ from init_db import get_connection
 LEAN_ALPHA = 0.8    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
-NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
+NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
 
 
@@ -428,7 +428,7 @@ def project_senate_control(predictions, nominees_state_count):
         if r["is_flip"]:
             flips.append(r)
 
-    # Unpolled/untracked Class 2 seats (outside nominees.csv or lacking polls) are
+    # Unpolled/untracked Class 2 seats (outside senate_nominees.csv or lacking polls) are
     # assumed Republican holds — safe red seats are the ones that go unpolled.
     projected_r    += SEATS_UP_2026 - len(seen_states)
     not_called      = 0

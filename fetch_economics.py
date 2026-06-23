@@ -10,7 +10,7 @@ load_dotenv()
 API_KEY = os.getenv("FRED_API_KEY")
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 YEAR = 2026
-LAMBDA = 0.03  # same recency decay as model.py
+LAMBDA = 0.03  # same recency decay as senate_model.py
 
 # Series ID → factor name in our DB
 # Each chosen for documented correlation with midterm incumbent party performance
@@ -25,17 +25,17 @@ INDICATORS = {
 
 # ---------------------------------------------------------------------------
 # Display metadata for interpretation column
-# Mirrors INDICATOR_RANGES / INDICATOR_DIRECTION in model.py but kept here
-# to avoid a circular import — this file runs standalone before model.py.
+# Mirrors INDICATOR_RANGES / INDICATOR_DIRECTION in senate_model.py but kept here
+# to avoid a circular import — this file runs standalone before senate_model.py.
 #
 # Each entry: (low, high, direction, unit_fmt)
-#   low/high   — historical range endpoints (same as model.py)
+#   low/high   — historical range endpoints (same as senate_model.py)
 #   direction  — +1 means higher value = worse economy = helps D
 #                -1 means higher value = better economy = helps R
 #   unit_fmt   — a callable that formats the raw value for display
 # ---------------------------------------------------------------------------
 FACTOR_META = {
-    # Ranges must stay in sync with INDICATOR_RANGES in model.py.
+    # Ranges must stay in sync with INDICATOR_RANGES in senate_model.py.
     # If you change a range there, change it here too (and vice versa).
     #
     # direction: +1 = higher value is worse for R incumbents (e.g. unemployment)
@@ -58,15 +58,34 @@ _STRENGTH_LABELS = [(0.10, "neutral"), (0.25, "mild"), (0.45, "moderate"), (1.01
 
 def interpret_factor(factor_name, value):
     """
-    Returns a human-readable string explaining how value affects projected outcomes.
-    Example: "4.1% → mild headwind for R incumbents"
+    Interprets the impact of a given factor on political incumbents based on its value and metadata.
+
+    This function normalizes a provided factor value, calculates its deviation from a neutral midpoint,
+    and determines the resulting impact strength and direction. It assesses how the factor might favor or
+    hinder Republican incumbents using predefined metadata and thresholds.
+
+    Parameters:
+        factor_name: str
+            The name of the factor to evaluate. Must exist in the FACTOR_META mapping.
+        value: float
+            The numeric value of the factor to be interpreted.
+
+    Returns:
+        str
+            A descriptive string summarizing the factor's value, the deviation it represents, and
+            the resulting tilt/impact for Republican incumbents. Returns an empty string if the provided
+            factor_name is not found in FACTOR_META.
+
+    Raises:
+        KeyError: Raised if the provided factor_name is not found in FACTOR_META mapping.
+
     """
     if factor_name not in FACTOR_META:
         return ""
 
     low, high, direction, fmt = FACTOR_META[factor_name]
 
-    # Normalize to [0, 1], clamped — same math as model.py get_climate_score()
+    # Normalize to [0, 1], clamped — same math as senate_model.py get_climate_score()
     normalized = max(0.0, min(1.0, (value - low) / (high - low)))
 
     # Deviation from neutral midpoint; direction flips sign meaning
@@ -92,7 +111,27 @@ def interpret_factor(factor_name, value):
 # ---------------------------------------------------------------------------
 
 def fetch_latest(series_id):
-    """Fetch the most recent observation for a FRED series."""
+    """
+    Fetches the latest observation data from the FRED API for a given series.
+
+    This function retrieves data from the FRED API based on the provided series
+    ID. It fetches the most recent observations, ensures the response is HTTP
+    compliant, and removes any entries with missing or invalid values.
+
+    Arguments:
+        series_id (str): The ID of the series to fetch data for.
+
+    Returns:
+        list[dict]: A list of observation dictionaries, each containing data for
+        valid entries. Invalid entries with a value of "." are excluded.
+
+    Raises:
+        HTTPError: If the HTTP request to the FRED API fails.
+
+    Notes:
+        The function uses parameters to define the number of observations fetched,
+        the data format, and the sorting order to ensure consistency.
+    """
     params = {
         "series_id":  series_id,
         "api_key":    API_KEY,
@@ -106,6 +145,23 @@ def fetch_latest(series_id):
     return [o for o in obs if o["value"] != "."]
 
 def compute_value(series_id, obs):
+    """
+    Computes a value based on the provided series identifier and observations. The computation adjusts
+    based on the series type, calculating percentage changes for specific series or returning the latest
+    value as appropriate.
+
+    Parameters:
+        series_id (str): The identifier for the data series.
+        obs (list[dict]): A list of observations where each observation is a dictionary containing 'value' (str)
+            and 'date' (formatted as 'YYYY-MM-DD').
+
+    Returns:
+        float or None: The computed value as a percentage change or the latest observation value rounded
+        to two decimal places, or None if the input `obs` is empty or specific conditions are not met.
+
+    Raises:
+        None
+    """
     if not obs:
         return None
 
@@ -143,8 +199,24 @@ def compute_value(series_id, obs):
 
 def fetch_approval_rating(filepath, year=2026):
     """
-    Computes a credibility × recency weighted average of Trump approval
-    from the NYT presidential approval polls CSV and stores it in climate_factors.
+    Fetches and computes a weighted approval rating for Donald Trump based on poll data.
+
+    This function processes a CSV file containing poll data to compute a weighted
+    approval rating for Donald Trump. The computation takes into account the population
+    type, poll credibility, recency of the poll, and approval percentage. The result is
+    stored in a database associated with a given year and factor name.
+
+    Parameters:
+        filepath (str): The path to the CSV file containing the poll data.
+        year (int): The year for which the computed approval rating should be stored
+            in the database. Defaults to 2026.
+
+    Raises:
+        ValueError: Raised if the CSV parsing or data processing encounters invalid
+            values in required columns.
+
+    Returns:
+        None
     """
     df = pd.read_csv(filepath)
 
@@ -214,6 +286,19 @@ def fetch_approval_rating(filepath, year=2026):
 # ---------------------------------------------------------------------------
 
 def fetch_and_store_all():
+    """
+    Fetches data for multiple indicators, computes values, and stores the results in a database.
+
+    This function retrieves the latest data points for various climate indicators, processes the data
+    to compute specific values, and stores the results in a database using an upsert strategy. In
+    addition, it attempts to fetch and process the presidential approval rating from a local CSV file,
+    if available.
+
+    Raises:
+        Exception: Raised during data fetching, computation, or database interaction for any indicator
+        in case of an error.
+
+    """
     con = get_connection()
     cur = con.cursor()
 

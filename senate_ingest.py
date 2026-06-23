@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from init_db import get_connection
 
-_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "nominees.csv")
+_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,6 +86,22 @@ def _build_state_tokens(nominees_path):
 
 
 def load_nyt_senate_polls(filepath, year=2026):
+    """
+    Loads and processes Senate poll data from a CSV file, performing transformations and validations
+    to prepare it for database insertion. The function filters the data to include only general
+    election polls for major party candidates, ensures data quality with deduplication and stale
+    poll removal, and formats data for storage.
+
+    Parameters:
+        filepath (str): Path to the CSV file containing the Senate poll data.
+        year (int, optional): The election year to associate with the poll data. Defaults to 2026.
+
+    Returns:
+        None
+
+    Raises:
+        Various exceptions may arise from file reading, data parsing, or database operations.
+    """
     df = pd.read_csv(filepath)
 
     # Only general election, only major parties, only real candidates
@@ -125,7 +141,7 @@ def load_nyt_senate_polls(filepath, year=2026):
         df = df[~stale_mask].drop(columns=["_election_dt"])
 
     # Question-block dedup: for each (poll_id, state), keep the question_id whose
-    # candidates best match nominees.csv.
+    # candidates best match senate_nominees.csv.
     #
     # Score = (ratio of block candidates that are known nominees, absolute count of matches).
     # A clean H2H [D, R] where both are nominees scores (1.0, 2); a full-field [D, R, L, G]
@@ -138,8 +154,27 @@ def load_nyt_senate_polls(filepath, year=2026):
         df["question_id"] = df["question_id"].fillna("__default__")
 
         def _name_matches(candidate_name, tokens):
+            """
+       Check whether any token from the candidate's name appears in the given token set.
+       Parameters:
+           candidate_name (str): The candidate's full name.
+           tokens (set): A set of lowercase name tokens for known nominees in a state.
+       Returns:
+           bool: True if at least one word from the candidate's name is found in tokens.
+       """
             return any(tok in tokens for tok in str(candidate_name).lower().split())
-
+        # Question-block selection:
+        # For each (poll_id, state) group, evaluate every question_id block by scoring
+        # how well its candidates match the known nominees for that state.
+        #
+        # Score is a tuple: (match_ratio, match_count)
+        #   - match_ratio = number of matching candidates / total candidates in the block
+        #   - match_count = raw count of matching candidates
+        #
+        # The block with the highest score (compared lexicographically) is kept.
+        # Example: a clean head-to-head [D, R] where both are nominees → score (1.0, 2)
+        #          a full-field [D, R, L, G] where only D and R match  → score (0.5, 2)
+        #
         # Use an explicit for-loop over groups instead of groupby().apply() —
         # apply() with a Python function is severely slow in pandas 3.x due to
         # per-group probing and concat overhead; iterating groups directly avoids it.
@@ -159,6 +194,10 @@ def load_nyt_senate_polls(filepath, year=2026):
         df = df.loc[keep_idx].reset_index(drop=True)
 
     # Population dedup — after question selection so each candidate appears once per poll_id
+    # Population dedup — must run AFTER question selection so that collapsing
+    # across question_ids does not break the per-question grouping above.
+    # Prefer likely voters (lv) over registered voters (rv) over all adults (a),
+    # as encoded in pop_rank. Keeps the first (lowest-rank) row per (poll_id, candidate).
     df = df.sort_values("pop_rank")
     df = df.drop_duplicates(subset=["poll_id", "candidate_name"], keep="first")
 
@@ -200,8 +239,15 @@ def load_nyt_senate_polls(filepath, year=2026):
 
 def load_climate_factors(filepath):
     """
-    Hand-authored CSV with columns: year, factor_name, value
-    e.g. 2026, PRES_APPROVAL, 44.5
+    Loads climate factors from a CSV file and inserts or updates the data into a database.
+
+    Parameters:
+    filepath : str
+        The file path to the CSV file containing climate factor data.
+
+    Raises:
+    ValueError
+        If the file does not contain valid data for insertion.
     """
     df = pd.read_csv(filepath)
     df.columns = df.columns.str.strip()
