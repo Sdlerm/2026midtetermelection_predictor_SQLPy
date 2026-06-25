@@ -33,7 +33,7 @@ INDICATOR_RANGES = {
     "REAL_DISPOSABLE_INC":(16000, 21000),  # 15000 was pre-pandemic floor, 16000 more accurate for 2020s
     "GDP_GROWTH":         (-2.0,   4.0),   # ±5% is outside the realistic 2020s envelope
     "FED_FUNDS_RATE":     (0.0,   5.5),    # 5.5% was the actual cycle peak; 6% was never reached
-    "PRES_APPROVAL":      (25.0,  69.0),   # full historical range valid (Nixon low, post-9/11 Bush high)
+    #"PRES_APPROVAL":      (25.0,  69.0),   # full historical range valid (Nixon low, post-9/11 Bush high)
 }
 
 # Direction: +1 means "higher value = worse economy = helps D challenger"
@@ -45,7 +45,8 @@ INDICATOR_DIRECTION = {
     "REAL_DISPOSABLE_INC":-1,   # high income helps incumbent (R)
     "GDP_GROWTH":         -1,   # high growth helps incumbent (R)
     "FED_FUNDS_RATE":      1,   # high rates hurt incumbent (R)
-    "PRES_APPROVAL":      -1,   # high approval helps incumbent (R) (direction -1 means that higher value is better for incumbent)
+    #"PRES_APPROVAL":      -1,   # high approval helps incumbent (R) (direction -1 means that higher value is better
+    # for incumbent)
 }
 
 # ---------------------------------------------------------------------------
@@ -131,9 +132,23 @@ def weighted_average(race_id, candidate_id):
 
 def get_climate_score(year=2026):
     """
-    Returns a single float in [-1, +1].
-    Positive = economic environment favors Democrats.
-    Negative = economic environment favors Republicans.
+    Calculates a climate score based on the most recent data for various climate indicators
+    in a specific year and their historical ranges.
+
+    The climate score represents an aggregated and normalized value for multiple climate
+    factors. Each factor is normalized to a range of [0, 1] using historical data, adjusted
+    for its directionality, and combined to produce a single weighted score.
+
+    Parameters:
+        year (int, optional): The year for which the climate data should be fetched. Defaults to 2026.
+
+    Returns:
+        float: A composite climate score ranging from -1 to +1. A positive score indicates
+        conditions moving toward historical improvement (using provided directionalities),
+        while a negative score indicates worsening conditions.
+
+    Raises:
+        None
     """
     # Fetch the latest value for each indicator from the database, normalize it to [0, 1] based on historical ranges, and apply directionality
     con = get_connection()

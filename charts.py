@@ -154,22 +154,21 @@ def plot_seat_count():
 
 def plot_vote_shares():
     """
-    Plots the projected vote shares for the 2026 Senate races and saves the visualization as
-    a PNG image.
+    Plots projected vote shares for Democratic and Republican candidates in the 2026 Senate
+    races, displaying incumbency status, vote margins, and other contextual details.
 
-    This function retrieves predictions for all races, processes them to extract vote share
-    data by state and party, and generates a visual bar chart comparing the projected vote
-    shares for major parties (Democrat and Republican) across states. Incumbents are indicated
-    on the chart with an asterisk.
+    The function generates a bar chart comparing Democratic and Republican vote shares
+    across different states with labeling for vote margins, incumbency, and names of candidates.
+    ### Raises
+    ValueError: If the data format for predictions is invalid or required fields are missing
+                in the input.
 
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    Exception
-        If the function fails during prediction retrieval or while plotting the graph.
+    ### Notes
+    - This function relies on `predict_all_races` to provide predictions for all Senate races.
+    - The chart is saved as `vote_shares.png` in the current working directory.
+    - The function assumes the predictions include the fields: "state", "party", "projected",
+      "name", and "is_incumbent".
+    - Incumbent candidates are marked with an asterisk (*) in the corresponding labels.
     """
     predictions, _, nominees_count = predict_all_races()
 
