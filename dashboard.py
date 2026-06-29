@@ -132,7 +132,7 @@ def color_margin(val):
 styled = (df.style
             .map(color_margin, subset=["Margin"])
             .format({"Margin": lambda v: f"{v:+.1f}"}))
-st.dataframe(styled, use_container_width=True, hide_index=True)
+st.dataframe(styled, width="stretch", hide_index=True)
 
 st.divider()
 

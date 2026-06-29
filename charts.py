@@ -181,6 +181,7 @@ def plot_vote_shares():
             "projected":    r["projected"],
             "name":         r["name"],
             "is_incumbent": r["is_incumbent"],
+            "is_flip":      r.get("is_flip", False),
         }
 
     rows = []
@@ -210,10 +211,11 @@ def plot_vote_shares():
     ax.bar_label(r_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#8b0000")
 
     for i, (_, d_key, d_info, r_info, margin) in enumerate(rows):
+        is_flip = d_info.get("is_flip", False) or r_info.get("is_flip", False)
+        if not is_flip:
+            continue
         top = max(d_pcts[i], r_pcts[i])
-        sign = "+" if margin > 0 else ""
-        margin_str = f"{sign}{margin:.1f}{'D' if margin > 0 else 'R'}"
-        ax.text(i, top + 2.5, margin_str, ha="center", va="bottom", fontsize=6.5,
+        ax.text(i, top + 2.5, "FLIP!", ha="center", va="bottom", fontsize=7,
                 fontweight="bold", color="#3a7abf" if margin > 0 else "#c0392b")
 
     x_labels = []
