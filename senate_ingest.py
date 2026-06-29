@@ -279,15 +279,16 @@ if __name__ == "__main__":
     if not os.path.exists(senate_path):
         print(f"ERROR: {senate_path} not found. Download it manually and place it in data/")
     else:
-        # Wipe old data so we don't double-count on re-runs
+        # Wipe only the current forecast year's data so re-runs don't double-count,
+        # while leaving historical cycles (e.g. 2024 in historical_results) intact.
         con = get_connection()
         cur = con.cursor()
-        cur.execute("DELETE FROM polls")
-        cur.execute("DELETE FROM candidates")
-        cur.execute("DELETE FROM races")
+        cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026)")
+        cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026)")
+        cur.execute("DELETE FROM races WHERE year = 2026")
         con.commit()
         con.close()
-        print("Cleared old poll data.")
+        print("Cleared 2026 poll data.")
 
         load_nyt_senate_polls(senate_path)
 

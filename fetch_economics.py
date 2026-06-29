@@ -326,7 +326,7 @@ def fetch_and_store_all():
     con.close()
 
     # Presidential approval from NYT CSV
-    approval_path = os.path.join(os.path.dirname(__file__), "data", "president_approval_polls.csv")
+    approval_path = os.path.join(os.path.dirname(__file__), "data", "p.csv")
     if os.path.exists(approval_path):
         fetch_approval_rating(approval_path, year=YEAR)
     else:
