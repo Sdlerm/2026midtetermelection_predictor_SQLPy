@@ -8,9 +8,10 @@ _NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominee
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 # Upsert functions return the relevant ID for use in foreign keys.
 # Inserts or updates pollster record in a SQLite database, returning the pollster ID.
-def upsert_pollster(cur, name, numeric_grade=None, partisan=None):
+def upsert_pollster(cursor, name, numeric_grade=None, partisan=None):
     try:
         credibility = float(numeric_grade) if pd.notna(numeric_grade) else 1.0
     except (ValueError, TypeError):
@@ -19,33 +20,36 @@ def upsert_pollster(cur, name, numeric_grade=None, partisan=None):
     # Any non-null value means the poll was sponsored by a partisan actor.
     p = str(partisan).strip() if pd.notna(partisan) else ""
     partisan_lean = p if p not in ("", "nan") else None
-    cur.execute("""
+    cursor.execute("""
         INSERT INTO pollsters (name, credibility, partisan_lean)
         VALUES (?, ?, ?)
         ON CONFLICT(name) DO UPDATE SET
             credibility   = excluded.credibility,
             partisan_lean = excluded.partisan_lean
     """, (name, credibility, partisan_lean))
-    cur.execute("SELECT id FROM pollsters WHERE name = ?", (name,))
-    return cur.fetchone()[0]
+    cursor.execute("SELECT id FROM pollsters WHERE name = ?", (name,))
+    return cursor.fetchone()[0]
 
-def upsert_race(cur, year, state):
-    cur.execute("""
+
+def upsert_race(cursor, year, state):
+    cursor.execute("""
         INSERT INTO races (year, state)
         VALUES (?, ?)
         ON CONFLICT(year, state) DO NOTHING
     """, (year, state))
-    cur.execute("SELECT id FROM races WHERE year = ? AND state = ?", (year, state))
-    return cur.fetchone()[0]
+    cursor.execute("SELECT id FROM races WHERE year = ? AND state = ?", (year, state))
+    return cursor.fetchone()[0]
 
-def upsert_candidate(cur, race_id, name, party):
-    cur.execute("""
+
+def upsert_candidate(cursor, race_id, name, party):
+    cursor.execute("""
         INSERT INTO candidates (race_id, name, party)
         VALUES (?, ?, ?)
         ON CONFLICT(race_id, name) DO UPDATE SET party = excluded.party
     """, (race_id, name, party))
-    cur.execute("SELECT id FROM candidates WHERE race_id = ? AND name = ?", (race_id, name))
-    return cur.fetchone()[0]
+    cursor.execute("SELECT id FROM candidates WHERE race_id = ? AND name = ?", (race_id, name))
+    return cursor.fetchone()[0]
+
 
 # ---------------------------------------------------------------------------
 # FiveThirtyEight / NYT senate polls CSV

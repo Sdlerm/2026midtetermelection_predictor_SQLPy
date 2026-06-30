@@ -10,14 +10,24 @@ YEAR = 2024
 
 def classify_party(party_simplified):
     """
-    Map a candidate to our single-letter convention (D / R / I).
+    Classify a political party designation into a standardized single-letter code.
 
-    IMPORTANT: this is only ever called AFTER the top-2-by-votes filter below,
-    so any candidate reaching it is one of the two real contenders in a race.
-    That lets us avoid parsing MEDSL's messy party_detailed labels
-    ("BY PETITION", "UNAFFILIATED", "INDEPENDENT", "INDEPENDENCE-ALLIANCE"...):
-    a top-2 finisher who isn't a major party is, for our purposes, a genuine
-    competitive independent (Osborn, Sanders, King).
+    Takes a party affiliation string and converts it to a standardized single-letter
+    representation. Democrat affiliations are converted to "D", Republican
+    affiliations to "R", and all other values (including independent, third-party,
+    or unrecognized affiliations) are converted to "I".
+
+    Parameters
+    ----------
+    party_simplified : str
+        The party affiliation to classify. The input is converted to uppercase
+        string for case-insensitive comparison.
+
+    Returns
+    -------
+    str
+        A single-letter party code: "D" for Democrat, "R" for Republican, or "I"
+        for all other cases (Independent or other).
     """
     ps = str(party_simplified).upper()
     if ps == "DEMOCRAT":

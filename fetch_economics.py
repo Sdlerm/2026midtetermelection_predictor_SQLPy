@@ -46,7 +46,7 @@ FACTOR_META = {
     "REAL_DISPOSABLE_INC":(16000, 21000, -1, lambda v: f"${v:,.0f}B"),
     "GDP_GROWTH":         (-2.0,   4.0,  -1, lambda v: f"{v:.1f}%"),
     "FED_FUNDS_RATE":     (0.0,   5.5,   +1, lambda v: f"{v:.2f}%"),
-    "PRES_APPROVAL":      (25.0,  69.0,  -1, lambda v: f"{v:.1f}%"),  # higher approval = good for R
+   # "PRES_APPROVAL":      (25.0,  69.0,  -1, lambda v: f"{v:.1f}%"),  # higher approval = good for R
 }
 
 # Thresholds for how far the normalized score deviates from the neutral midpoint (0.5).
@@ -326,7 +326,7 @@ def fetch_and_store_all():
     con.close()
 
     # Presidential approval from NYT CSV
-    approval_path = os.path.join(os.path.dirname(__file__), "data", "p.csv")
+    approval_path = os.path.join(os.path.dirname(__file__), "data", "president_approval_polls.csv")
     if os.path.exists(approval_path):
         fetch_approval_rating(approval_path, year=YEAR)
     else:
