@@ -8,50 +8,83 @@ st.set_page_config(page_title="2026 Senate Predictor", layout="wide")
 st.title("🗳️ 2026 Senate Election Predictor")
 st.caption("Weighted polling average · Credibility × recency decay · Updates on refresh")
 
+PARTY_COLOR = {"D": "#3a7abf", "R": "#c0392b", "I": "#8e44ad"}
+PARTY_ICON  = {"D": "🔵", "R": "🔴", "I": "🟣"}
+
 @st.cache_data(ttl=300)
+
+
 def load_predictions():
+    """
+    Load and process election predictions data with caching.
+
+    This function retrieves predictions for all races, calculates Senate control
+    projections, and structures the data into a DataFrame suitable for
+    visualization. The results are cached for 5 minutes (300 seconds) to improve
+    performance and reduce redundant calculations.
+
+    The function processes race predictions by grouping candidates by state,
+    identifying the top two candidates by projected vote percentage, and
+    calculating vote margins. The margin convention uses positive values when a
+    non-Republican leads and negative values when a Republican leads, enabling
+    meaningful left-right spectrum visualization regardless of party composition
+    (including Independent candidates).
+
+    Returns:
+        tuple: A three-element tuple containing:
+            - pandas.DataFrame: Processed election data with columns for State,
+              Leader, Leader %, Leader Party, Challenger, Challenger %, Margin,
+              and Flip indicator, sorted by margin in descending order
+            - Any: Climate data from the prediction model
+            - Any: Senate control projection results
+
+    Notes:
+        States with fewer than two candidates are excluded from the results.
+        Incumbent candidates are marked with an asterisk (*) in their party label.
+        Winners are prefixed with a star symbol (★) in their label.
+        Flip races are indicated with a lightning bolt symbol (⚡) in the Flip
+        column.
+        The margin is calculated as the difference between leader and challenger
+        projected percentages, with sign based on whether the leader is Republican.
+    """
     predictions, climate, nominees_count = predict_all_races()
     control = project_senate_control(predictions, nominees_count)
 
+    # Group by state only — do NOT assume a "D" and "R" key. A race can have
+    # any combination of parties (e.g. NE 2026 is I vs R, no Dem candidate).
     seen = {}
     for r in predictions:
-        state = r["state"]
-        if state not in seen:
-            seen[state] = {}
-        seen[state][r["party"]] = {
-            "name":           r["name"],
-            "poll_avg":       r["poll_avg"],
-            "adjustment":     r["adjustment"],
-            "pct":            r["projected"],
-            "is_incumbent":   r["is_incumbent"],
-            "is_flip":        r.get("is_flip", False),
-            "winner":         r.get("winner", False),
-        }
+        seen.setdefault(r["state"], []).append(r)
 
     rows = []
-    for state, parties in seen.items():
-        d = parties.get("D")
-        r = parties.get("R")
-        if not d or not r:
+    for state, cands in seen.items():
+        # Top 2 by projected pct = the actual contest, same filter logic as
+        # load_historical.py's top-2-by-votes rule. Skip if fewer than 2
+        # candidates have data for this state.
+        cands = sorted(cands, key=lambda c: c["projected"], reverse=True)
+        if len(cands) < 2:
             continue
-        margin = d["pct"] - r["pct"]
-        winner_party = "D" if margin > 0 else "R"
-        winner_data  = d if margin > 0 else r
+        leader, challenger = cands[0], cands[1]
 
-        d_party   = "D*" if d["is_incumbent"] else "D"
-        r_party   = "R*" if r["is_incumbent"] else "R"
-        dem_label = f"{'★ ' if d['winner'] else ''}{d_party} {d['name']}"
-        rep_label = f"{'★ ' if r['winner'] else ''}{r_party} {r['name']}"
+        lead_size = leader["projected"] - challenger["projected"]
+        # Sign convention: positive = leader is not Republican, negative = Republican leads.
+        # Keeps the chart's left/right spectrum meaningful even with an I candidate.
+        margin = -lead_size if leader["party"] == "R" else lead_size
+
+        def label(c):
+            party = f"{c['party']}*" if c["is_incumbent"] else c["party"]
+            star = "★ " if c.get("winner") else ""
+            return f"{star}{party} {c['name']}"
 
         rows.append({
-            "State":    state,
-            "Dem":      dem_label,
-            "Dem %":    d["pct"],
-            "Rep":      rep_label,
-            "Rep %":    r["pct"],
-            "Margin":   round(margin, 1),
-            "Leader":   winner_party,
-            "Flip":     "⚡" if winner_data["is_flip"] else "",
+            "State":          state,
+            "Leader":         label(leader),
+            "Leader %":       leader["projected"],
+            "Leader Party":   leader["party"],
+            "Challenger":     label(challenger),
+            "Challenger %":   challenger["projected"],
+            "Margin":         round(margin, 1),
+            "Flip":           "⚡" if leader.get("is_flip", False) else "",
         })
 
     return pd.DataFrame(rows).sort_values("Margin", ascending=False), climate, control
@@ -84,24 +117,25 @@ if control["flips"]:
 st.divider()
 
 # --- Summary metrics ---
-col1, col2, col3, col4 = st.columns(4)
-dem_leads = (df["Leader"] == "D").sum()
-rep_leads = (df["Leader"] == "R").sum()
+col1, col2, col3, col4, col5 = st.columns(5)
+dem_leads = (df["Leader Party"] == "D").sum()
+rep_leads = (df["Leader Party"] == "R").sum()
+ind_leads = (df["Leader Party"] == "I").sum()
 flips     = df["Flip"].str.contains("⚡").sum()
 col1.metric("Dem leads", dem_leads)
 col2.metric("Rep leads", rep_leads)
-col3.metric("Projected flips", flips)
-col4.metric("Races tracked", len(df))
+col3.metric("Ind leads", ind_leads)
+col4.metric("Projected flips", flips)
+col5.metric("Races tracked", len(df))
 
 st.divider()
 
 # --- Margin chart ---
 st.subheader("Race margins")
 fig, ax = plt.subplots(figsize=(10, len(df) * 0.45 + 1.5))
-colors = ["#3a7abf" if m > 0 else "#c0392b" for m in df["Margin"]]
+colors = [PARTY_COLOR.get(p, "#7f8c8d") for p in df["Leader Party"]]
 bars = ax.barh(df["State"], df["Margin"], color=colors, height=0.6)
 
-# Mark flips with a lightning bolt on the bar
 for i, (_, row) in enumerate(df.iterrows()):
     if row["Flip"] == "⚡":
         x = row["Margin"]
@@ -109,10 +143,9 @@ for i, (_, row) in enumerate(df.iterrows()):
         ax.text(x + offset, i, "⚡", va="center", fontsize=9)
 
 ax.axvline(0, color="black", linewidth=0.8)
-ax.set_xlabel("D margin (positive = Dem leads)")
-d_patch = mpatches.Patch(color="#3a7abf", label="Dem leads")
-r_patch = mpatches.Patch(color="#c0392b", label="Rep leads")
-ax.legend(handles=[d_patch, r_patch])
+ax.set_xlabel("Leader margin (positive = non-Republican leads)")
+handles = [mpatches.Patch(color=c, label=f"{p} leads") for p, c in PARTY_COLOR.items()]
+ax.legend(handles=handles)
 plt.tight_layout()
 st.pyplot(fig)
 
@@ -122,14 +155,31 @@ st.divider()
 st.subheader("All races")
 
 def color_margin(val):
-    if val > 0:
-        intensity = min(int(abs(val) * 12), 180)
-        return f"background-color: rgba(58,122,191,{intensity/255:.2f})"
-    else:
-        intensity = min(int(abs(val) * 12), 180)
-        return f"background-color: rgba(192,57,43,{intensity/255:.2f})"
+    """
+    Generate a CSS background color style string based on a numeric value's
+    sign and magnitude. Positive values produce blue backgrounds, negative
+    values produce red backgrounds, with intensity proportional to the
+    absolute value.
 
-styled = (df.style
+    Parameters
+    ----------
+    val : numeric
+        The value used to determine background color intensity and hue. Positive
+        values result in blue backgrounds, negative values result in red
+        backgrounds.
+
+    Returns
+    -------
+    str
+        A CSS background-color style string in rgba format with calculated
+        opacity based on the input value's magnitude.
+    """
+    intensity = min(int(abs(val) * 12), 180)
+    color = "58,122,191" if val > 0 else "192,57,43"
+    return f"background-color: rgba({color},{intensity/255:.2f})"
+
+styled = (df[["State", "Leader", "Leader %", "Challenger", "Challenger %", "Margin", "Flip"]]
+            .style
             .map(color_margin, subset=["Margin"])
             .format({"Margin": lambda v: f"{v:+.1f}"}))
 st.dataframe(styled, width="stretch", hide_index=True)
@@ -143,14 +193,14 @@ row = df[df["State"] == selected].iloc[0]
 
 c1, c2 = st.columns(2)
 with c1:
-    st.metric(f"🔵 {row['Dem']}", f"{row['Dem %']}%")
+    st.metric(f"{PARTY_ICON.get(row['Leader Party'], '⚪')} {row['Leader']}", f"{row['Leader %']}%")
 with c2:
-    st.metric(f"🔴 {row['Rep']}", f"{row['Rep %']}%")
+    st.metric(f"{row['Challenger']}", f"{row['Challenger %']}%")
 
-margin_label = f"+{abs(row['Margin'])} {'D' if row['Margin'] > 0 else 'R'}"
+margin_label = f"{abs(row['Margin'])} {'non-R' if row['Margin'] > 0 else 'R'}"
 if row["Flip"] == "⚡":
     st.caption("⚡ Projected flip from current party")
 st.progress(
-    int(row["Dem %"]) / 100,
-    text=f"Dem {row['Dem %']}% · Rep {row['Rep %']}% · Margin {margin_label}"
+    int(row["Leader %"]) / 100,
+    text=f"{row['Leader']} {row['Leader %']}% · {row['Challenger']} {row['Challenger %']}% · Margin {margin_label}"
 )
