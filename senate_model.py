@@ -12,6 +12,12 @@ from init_db import get_connection
 LEAN_ALPHA = 0.8    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
+APPROVAL_WEIGHT = 0.05
+# separate lever for presidential approval; PROVISIONAL — not
+# yet backtested against historical_results, chosen as roughly
+# half of ECON_WEIGHT as a placeholder, not a validated value
+TOSSUP_THRESHOLD_PP = 1.1 #if the finalists shares are w/i 1pp, flag as "toss-up"
+
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
 
@@ -41,6 +47,9 @@ INDICATOR_RANGES = {
     "FED_FUNDS_RATE":     (0.0,   5.5),    # 5.5% was the actual cycle peak; 6% was never reached
     #"PRES_APPROVAL":      (25.0,  69.0),   # full historical range valid (Nixon low, post-9/11 Bush high)
 }
+
+APPROVAL_RANGE = (25.0,69.0)
+APPROVAL_DIRECTION = -1 # high approval helps the R incumbent (mirrors direction convention above)
 
 # Direction: +1 means "higher value = worse economy = helps D challenger"
 #            -1 means "higher value = better economy = helps R incumbent"
@@ -198,6 +207,33 @@ def get_climate_score(year=2026):
 
     return round(sum(scores) / len(scores), 3)
 
+def get_approval_score(year=2026):
+    """
+    Fetches the latest PRES_APPROVAL value from climate_factors and normalizes it
+    into a -1..+1 score, using the same normalize-then-direction method as
+    get_climate_score() — but kept as its own separate signal rather than being
+    averaged into the six-indicator climate block.
+
+    Positive = favors D (i.e., low presidential approval, since Republicans hold
+    the White House this cycle). Returns 0.0 if no approval data is stored yet,
+    same "no adjustment" fallback behavior as get_climate_score().
+    """
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute("""
+        SELECT value FROM climate_factors
+        WHERE year = ? AND factor_name = 'PRES_APPROVAL'
+    """, (year,))
+    row = cur.fetchone()
+    con.close()
+
+    if row is None:
+        return 0.0
+
+    value = row[0]
+    low, high = APPROVAL_RANGE
+    normalized = max(0.0, min(1.0, (value - low) / (high - low)))
+    return round((normalized - 0.5) * 2 * APPROVAL_DIRECTION, 3)
 
 def climate_adjustment(party, climate_score):
     """
@@ -213,6 +249,19 @@ def climate_adjustment(party, climate_score):
         return round(raw, 2)
     else:
         return round(-raw, 2)  # inverse for R
+
+def approval_adjustment(party, approval_score):
+    """
+    Converts an approval score into a percentage-point adjustment for a candidate.
+    Mirrors climate_adjustment() exactly, but scaled by APPROVAL_WEIGHT instead of
+    ECON_WEIGHT — this is what keeps approval's influence tunable independently of
+    the six-indicator climate block.
+    """
+    raw = approval_score * APPROVAL_WEIGHT * 10
+    if party == "D":
+        return round(raw, 2)
+    else:
+        return round(-raw, 2)
 
 def load_state_lean():
     """
@@ -328,6 +377,7 @@ def predict_all_races(year=2026):
     state_lean          = load_state_lean()
     nominees_state_count = len({s for (s, _) in nominees})
     climate             = get_climate_score(year)
+    approval             = get_approval_score(year)
 
 
     con = get_connection()
@@ -367,10 +417,11 @@ def predict_all_races(year=2026):
                 continue
 
             adjustment = climate_adjustment(party, climate)
+            approval_adj = approval_adjustment(party, approval)
 
             lean = lean_baseline(state, party, state_lean)
             blended = LEAN_ALPHA*poll_avg + (1-LEAN_ALPHA)*lean
-            projected = round(blended + adjustment, 1)
+            projected = round(blended + adjustment + approval_adj, 1)
             #projected = round(poll_avg + adjustment, 1)
 
             incumbent_party = nominee_info["incumbent_party"]
@@ -384,6 +435,7 @@ def predict_all_races(year=2026):
                 "poll_avg": poll_avg,
                 "lean": round(lean, 1),
                 "adjustment": adjustment,
+                "approval_adjustment": approval_adj,
                 "projected": projected,
                 "incumbent_party": incumbent_party,
                 "is_incumbent": is_incumbent,
@@ -392,6 +444,7 @@ def predict_all_races(year=2026):
         if not finalists:
             continue
 
+        # After
         finalists.sort(key=lambda x: x["projected"], reverse=True)
         finalists[0]["winner"] = True
         for f in finalists[1:]:
@@ -405,6 +458,15 @@ def predict_all_races(year=2026):
         )
         for f in finalists[1:]:
             f["is_flip"] = False
+
+        # Toss-up detection — gap between 1st and 2nd place is too small to
+        # trust as a confident call. Only meaningful with 2+ finalists; a
+        # single-candidate race (data gap, not a real toss-up) is never tagged.
+        margin = finalists[0]["projected"] - finalists[1]["projected"] if len(finalists) > 1 else None
+        is_tossup = margin is not None and margin < TOSSUP_THRESHOLD_PP
+        for f in finalists:
+            f["is_tossup"] = is_tossup
+            f["margin"] = round(margin, 2) if margin is not None else None
 
         results.extend(finalists)
 
@@ -478,23 +540,33 @@ def project_senate_control(predictions, nominees_state_count):
         "flips": flips,
     }
 
+# After
 if __name__ == "__main__":
     predictions, climate, nominees_count = predict_all_races()
+    approval = get_approval_score()  # queried separately rather than added to
+    # predict_all_races()'s return tuple, so
+    # dashboard.py's unpacking stays untouched
 
-    direction = "favors D" if climate > 0 else "favors R"
-    print(f"Climate score: {climate:+.3f} ({direction})")
-    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.1f}pp\n")
+    climate_direction  = "favors D" if climate > 0 else "favors R"
+    approval_direction = "favors D" if approval > 0 else "favors R"
+    print(f"Climate score: {climate:+.3f} ({climate_direction})")
+    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.1f}pp")
+    print(f"Approval score: {approval:+.3f} ({approval_direction})")
+    print(f"Approval adjustment: ±{abs(approval * APPROVAL_WEIGHT * 10):.1f}pp\n")
 
     current_state = None
     for r in predictions:
         if r["state"] != current_state:
             current_state = r["state"]
             print(f"\n── {current_state} ──────────────")
+        # After
         marker  = "★" if r.get("winner") else " "
         inc     = " [incumbent]" if r["is_incumbent"] else ""
         flip    = " ⚡FLIP" if r.get("winner") and r["is_flip"] else ""
-        adj     = f"{r['adjustment']:+.1f}pp"
-        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  lean: {r['lean']}%  adj: {adj}  → {r['projected']}%{inc}{flip}")
+        tossup  = " 🪙TOSSUP" if r.get("winner") and r["is_tossup"] else ""
+        econ_adj = f"{r['adjustment']:+.1f}pp"
+        appr_adj = f"{r['approval_adjustment']:+.1f}pp"
+        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  lean: {r['lean']}%  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
 
     # Senate control projection
     control = project_senate_control(predictions, nominees_count)
