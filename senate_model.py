@@ -16,7 +16,7 @@ APPROVAL_WEIGHT = 0.05
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
-TOSSUP_THRESHOLD_PP = 1.1 #if the finalists shares are w/i 1pp, flag as "toss-up"
+#TOSSUP_THRESHOLD_PP = 1.1 #if the finalists shares are w/i 1pp, flag as "toss-up"
 
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
@@ -104,20 +104,12 @@ def recency_weight(poll_date_str):
     """
     return math.exp(-LAMBDA * days_ago(poll_date_str))
 
-def weighted_average(race_id, candidate_id):
-    """
-    Calculates the weighted average percentage for a candidate in a given race using
-    poll data. The weighting considers both poll credibility and recency.
-    Parameters:
-    race_id: int
-        The identifier for the race in which the candidate is competing.
-    candidate_id: int
-        The identifier for the candidate whose weighted average is being calculated.
-    Returns:
-    float or None
-        The weighted average percentage rounded to one decimal place if data exists,
-        otherwise None.
-    """
+
+import math
+from init_db import get_connection
+
+def weighted_average_and_stderr(race_id: int, candidate_id: int):
+    """Return (weighted_mean, weighted_stderr) or (None, None)."""
     con = get_connection()
     cur = con.cursor()
     cur.execute("""
@@ -130,17 +122,27 @@ def weighted_average(race_id, candidate_id):
     con.close()
 
     if not rows:
-        return None
+        return None, None
 
-    numerator   = 0.0
-    denominator = 0.0
-    for pct, poll_date, credibility in rows:
-        w = credibility * recency_weight(poll_date)
-        numerator   += pct * w
-        denominator += w
+    weighted_pcts = []
+    weights = []
+    for pct, poll_date, cred in rows:
+        w = cred * recency_weight(poll_date)
+        if w > 0:
+            weights.append(w)
+            weighted_pcts.append(pct * w)  # for mean
 
-    return round(numerator / denominator, 1) if denominator > 0 else None
+    if not weights:
+        return None, None
 
+    w_sum = sum(weights)
+    mean = sum(weighted_pcts) / w_sum
+
+    # Weighted variance (population version — conservative for error bars)
+    var = sum(w * (pct - mean)**2 for w, pct in zip(weights, [p/w for p,w in zip(weighted_pcts, weights)])) / w_sum
+    stderr = math.sqrt(var) if var > 0 else 0.0
+
+    return round(mean, 1), round(stderr, 2)
 # ---------------------------------------------------------------------------
 # Economic climate score
 # ---------------------------------------------------------------------------
@@ -412,7 +414,7 @@ def predict_all_races(year=2026):
                 continue
 
             candidate_id = row[0]
-            poll_avg = weighted_average(race_id, candidate_id)
+            poll_avg, poll_stderr = weighted_average_and_stderr(race_id, candidate_id)
             if poll_avg is None:
                 continue
 
@@ -433,6 +435,7 @@ def predict_all_races(year=2026):
                 "name": name,
                 "party": party,
                 "poll_avg": poll_avg,
+                "poll_stderr": poll_stderr,
                 "lean": round(lean, 1),
                 "adjustment": adjustment,
                 "approval_adjustment": approval_adj,
@@ -459,11 +462,24 @@ def predict_all_races(year=2026):
         for f in finalists[1:]:
             f["is_flip"] = False
 
-        # Toss-up detection — gap between 1st and 2nd place is too small to
-        # trust as a confident call. Only meaningful with 2+ finalists; a
-        # single-candidate race (data gap, not a real toss-up) is never tagged.
-        margin = finalists[0]["projected"] - finalists[1]["projected"] if len(finalists) > 1 else None
-        is_tossup = margin is not None and margin < TOSSUP_THRESHOLD_PP
+            # Toss-up detection using polling uncertainty (replaces the old fixed 1.1 pp threshold)
+        #
+        # We compute the combined standard error of the projected margin from the two
+        # finalists' poll_stderr values. A race is flagged toss-up if the gap is smaller
+        # than max(1.5 pp, ~1.8 × combined_se). This makes the zone data-adaptive:
+        # tight when polling is rich and high-quality, wider when data is sparse/low-grade.
+        if len(finalists) > 1:
+            d = finalists[0]
+            r = finalists[1]
+            d_se = d.get("poll_stderr") or 3.0
+            r_se = r.get("poll_stderr") or 3.0
+            combined_se = math.sqrt(d_se**2 + r_se**2)
+            margin = d["projected"] - r["projected"]
+            is_tossup = abs(margin) < max(1.5, 1.8 * combined_se)
+        else:
+            margin = None
+            is_tossup = False
+
         for f in finalists:
             f["is_tossup"] = is_tossup
             f["margin"] = round(margin, 2) if margin is not None else None
@@ -549,10 +565,13 @@ if __name__ == "__main__":
 
     climate_direction  = "favors D" if climate > 0 else "favors R"
     approval_direction = "favors D" if approval > 0 else "favors R"
+
+    max_econ_adj = abs(climate_adjustment("D", climate))
+    max_appr_adj = abs(approval_adjustment("D", approval))
     print(f"Climate score: {climate:+.3f} ({climate_direction})")
-    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.1f}pp")
+    print(f"Econ adjustment: ±{max_econ_adj:.1f}pp")
     print(f"Approval score: {approval:+.3f} ({approval_direction})")
-    print(f"Approval adjustment: ±{abs(approval * APPROVAL_WEIGHT * 10):.1f}pp\n")
+    print(f"Approval adjustment: ±{max_appr_adj:.1f}pp\n")
 
     current_state = None
     for r in predictions:
