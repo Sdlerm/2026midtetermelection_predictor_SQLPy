@@ -1,3 +1,4 @@
+import math
 import matplotlib
 try:
     matplotlib.use("macosx")
@@ -16,7 +17,10 @@ def plot_race_margins():
     This function processes projection data, calculates the vote margins
     for each race, and creates a sorted horizontal bar chart displaying
     these margins. The chart indicates party control via color codes and
-    highlights flipped states. It also displays a summary of projected
+    highlights flipped states. Error bars show polling uncertainty:
+    a weighted standard deviation across polls when 2+ are available,
+    or a sampling-error fallback (using sample size) when only one poll
+    exists for a candidate. It also displays a summary of projected
     Senate control in the chart title, and the final plot is saved as an
     image.
 
@@ -40,18 +44,21 @@ def plot_race_margins():
             "is_flip":      r.get("is_flip", False),
             "winner":       r.get("winner", False),
             "is_incumbent": r["is_incumbent"],
+            "stderr":       r.get("poll_stderr"),
         }
 
-    states, margins, colors, flips, y_labels = [], [], [], [], []
+    states, margins, colors, flips, y_labels, margin_errs = [], [], [], [], [], []
     for state, parties in sorted(seen.items()):
         d = parties.get("D")
         r = parties.get("R")
         if d is None or r is None:
             continue
         margin = d["projected"] - r["projected"]
+        margin_err = math.sqrt((d.get("stderr") or 0) ** 2 + (r.get("stderr") or 0) ** 2)
         winner_data = d if margin > 0 else r
         states.append(state)
         margins.append(margin)
+        margin_errs.append(margin_err)
         colors.append("#3a7abf" if margin > 0 else "#c0392b")
         flips.append(winner_data["is_flip"])
         d_lbl  = "D*" if d["is_incumbent"] else "D"
@@ -60,13 +67,14 @@ def plot_race_margins():
         r_last = r["name"].rsplit(" ", 1)[-1]
         y_labels.append(f"{state}  {d_lbl} {d_last} / {r_lbl} {r_last}")
 
-    combined = sorted(zip(states, margins, colors, flips, y_labels),
+    combined = sorted(zip(states, margins, colors, flips, y_labels, margin_errs),
                       key=lambda x: x[1], reverse=True)
-    states, margins, colors, flips, y_labels = zip(*combined)
+    states, margins, colors, flips, y_labels, margin_errs = zip(*combined)
 
     fig, ax = plt.subplots(figsize=(10, len(states) * 0.5 + 2))
     y = range(len(states))
-    ax.barh(y, margins, color=colors, height=0.6)
+    ax.barh(y, margins, xerr=margin_errs, color=colors, height=0.6,
+            ecolor="#666666", capsize=3)
     ax.axvline(0, color="black", linewidth=0.8)
 
     # Flip labels
@@ -106,6 +114,12 @@ def plot_seat_count():
     providing a visual representation of the Senate's current or predicted balance of power. Additional
     elements in the chart include a dashed line at the 50-seat majority mark, annotations for the Vice President's
     tiebreaker, and dynamic adjustments to labels and titles depending on the data.
+
+    No error bars here on purpose: a real one would mean simulating outcome
+    distributions across all races and propagating them into a distribution
+    of possible seat totals (i.e. the Monte Carlo work, not done yet) rather
+    than decorating a single point estimate with a number that isn't backed
+    by anything.
 
     Raises:
         None
@@ -159,6 +173,9 @@ def plot_vote_shares():
 
     The function generates a bar chart comparing Democratic and Republican vote shares
     across different states with labeling for vote margins, incumbency, and names of candidates.
+    Error bars on each bar show polling uncertainty (weighted standard deviation across
+    polls, or a sampling-error fallback when only one poll exists).
+
     ### Raises
     ValueError: If the data format for predictions is invalid or required fields are missing
                 in the input.
@@ -182,6 +199,7 @@ def plot_vote_shares():
             "name":         r["name"],
             "is_incumbent": r["is_incumbent"],
             "is_flip":      r.get("is_flip", False),
+            "stderr":       r.get("poll_stderr"),
         }
 
     rows = []
@@ -199,12 +217,16 @@ def plot_vote_shares():
 
     d_pcts = [row[2]["projected"] for row in rows]
     r_pcts = [row[3]["projected"] for row in rows]
+    d_errs = [row[2]["stderr"] or 0 for row in rows]
+    r_errs = [row[3]["stderr"] or 0 for row in rows]
     x = range(len(rows))
     width = 0.35
 
     fig, ax = plt.subplots(figsize=(14, 7))
-    d_bars = ax.bar([i - width / 2 for i in x], d_pcts, width, color="#3a7abf", label="Democrat")
-    r_bars = ax.bar([i + width / 2 for i in x], r_pcts, width, color="#c0392b", label="Republican")
+    d_bars = ax.bar([i - width / 2 for i in x], d_pcts, width, yerr=d_errs, capsize=3,
+                    color="#3a7abf", label="Democrat", ecolor="#666666")
+    r_bars = ax.bar([i + width / 2 for i in x], r_pcts, width, yerr=r_errs, capsize=3,
+                    color="#c0392b", label="Republican", ecolor="#666666")
     ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, label="50% threshold")
 
     ax.bar_label(d_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#1a4a7a")
