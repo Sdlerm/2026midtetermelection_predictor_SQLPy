@@ -15,7 +15,13 @@ ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
 
-
+# States with a 2026 Senate race: 33 regular Class 2 seats + FL/OH special elections
+STATES_WITH_2026_RACES = [
+    "AL", "AK", "AR", "CO", "DE", "FL", "GA", "IA", "ID", "IL",
+    "KS", "KY", "LA", "MA", "ME", "MI", "MN", "MS", "MT", "NC",
+    "NE", "NH", "NJ", "NM", "OH", "OK", "OR", "RI", "SC", "SD",
+    "TN", "TX", "VA", "WV", "WY",
+]
 
 # Independents who are expected to caucus with a major party if elected.
 # Osborn (NE-I) has stated he would caucus with Democrats.

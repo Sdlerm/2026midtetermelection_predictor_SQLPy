@@ -1,3 +1,5 @@
+import plotly.graph_objects as go
+from senate_model import predict_all_races, project_senate_control, STATES_WITH_2026_RACES
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,6 +15,44 @@ PARTY_ICON  = {"D": "🔵", "R": "🔴", "I": "🟣"}
 
 @st.cache_data(ttl=300)
 
+def plot_margin_map(df):
+    """
+Plots projection data into an interactive map in the dashboard.
+    """
+    tracked_states = set(df["State"])
+    untracked_states = [s for s in STATES_WITH_2026_RACES if s not in tracked_states]
+
+    fig = go.Figure()
+
+    if untracked_states:
+        fig.add_trace(go.Choropleth(
+            locations=untracked_states,
+            locationmode="USA-states",
+            z=[0] * len(untracked_states),
+            colorscale=[[0, "#d9d9d9"], [1, "#d9d9d9"]],
+            showscale=False,
+            marker_line_color="white",
+            text=untracked_states,
+            hovertemplate="%{text}: not yet tracked<extra></extra>",
+        ))
+
+    fig.add_trace(go.Choropleth(
+        locations=df["State"],
+        locationmode="USA-states",
+        z=df["Margin"],
+        colorscale="RdBu",
+        zmid=0,
+        marker_line_color="white",
+        colorbar_title="D margin",
+        text=df["State"],
+        hovertemplate="%{text}: %{z:+.1f} margin<extra></extra>",
+    ))
+
+    fig.update_layout(
+        geo=dict(scope="usa"),
+        margin=dict(l=0, r=0, t=10, b=0),
+    )
+    return fig
 
 def load_predictions():
     """
@@ -94,6 +134,9 @@ df, climate, control = load_predictions()
 # --- Economic climate caption ---
 direction = "favors Democrats" if climate > 0 else "favors Republicans"
 st.caption(f"Economic climate score: **{climate:+.3f}** ({direction}) · Adjustment: ±{abs(climate * 0.3 * 10):.1f}pp")
+
+st.subheader("2026 Senate map")
+st.plotly_chart(plot_margin_map(df), use_container_width=True)
 
 # --- Senate control banner ---
 st.divider()
