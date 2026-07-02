@@ -104,20 +104,11 @@ def recency_weight(poll_date_str):
     """
     return math.exp(-LAMBDA * days_ago(poll_date_str))
 
-def weighted_average(race_id, candidate_id):
-    """
-    Calculates the weighted average percentage for a candidate in a given race using
-    poll data. The weighting considers both poll credibility and recency.
-    Parameters:
-    race_id: int
-        The identifier for the race in which the candidate is competing.
-    candidate_id: int
-        The identifier for the candidate whose weighted average is being calculated.
-    Returns:
-    float or None
-        The weighted average percentage rounded to one decimal place if data exists,
-        otherwise None.
-    """
+import math
+from init_db import get_connection
+
+def weighted_average_and_stderr(race_id: int, candidate_id: int):
+    """Return (weighted_mean, weighted_stderr) or (None, None)."""
     con = get_connection()
     cur = con.cursor()
     cur.execute("""
@@ -130,16 +121,27 @@ def weighted_average(race_id, candidate_id):
     con.close()
 
     if not rows:
-        return None
+        return None, None
 
-    numerator   = 0.0
-    denominator = 0.0
-    for pct, poll_date, credibility in rows:
-        w = credibility * recency_weight(poll_date)
-        numerator   += pct * w
-        denominator += w
+    weighted_pcts = []
+    weights = []
+    for pct, poll_date, cred in rows:
+        w = cred * recency_weight(poll_date)
+        if w > 0:
+            weights.append(w)
+            weighted_pcts.append(pct * w)  # for mean
 
-    return round(numerator / denominator, 1) if denominator > 0 else None
+    if not weights:
+        return None, None
+
+    w_sum = sum(weights)
+    mean = sum(weighted_pcts) / w_sum
+
+    # Weighted variance (population version — conservative for error bars)
+    var = sum(w * (pct - mean)**2 for w, pct in zip(weights, [p/w for p,w in zip(weighted_pcts, weights)])) / w_sum
+    stderr = math.sqrt(var) if var > 0 else 0.0
+
+    return round(mean, 1), round(stderr, 2)
 
 # ---------------------------------------------------------------------------
 # Economic climate score
@@ -412,7 +414,7 @@ def predict_all_races(year=2026):
                 continue
 
             candidate_id = row[0]
-            poll_avg = weighted_average(race_id, candidate_id)
+            poll_avg, poll_stderr = weighted_average_and_stderr(race_id, candidate_id)
             if poll_avg is None:
                 continue
 
@@ -428,11 +430,14 @@ def predict_all_races(year=2026):
             is_incumbent = (party == incumbent_party) # this is a simplification; in reality we should check if the incumbent is actually running for re-election, but we'll assume that if the incumbent's party is listed, then the nominee from that party is the incumbent for modeling purposes
             is_flip = False  # set after we know the winner
 
+            poll_avg, poll_stderr = weighted_average_and_stderr(race_id, candidate_id)
+
             finalists.append({
                 "state": state,
                 "name": name,
                 "party": party,
                 "poll_avg": poll_avg,
+                "poll_stderr": poll_stderr,
                 "lean": round(lean, 1),
                 "adjustment": adjustment,
                 "approval_adjustment": approval_adj,
@@ -549,10 +554,10 @@ if __name__ == "__main__":
 
     climate_direction  = "favors D" if climate > 0 else "favors R"
     approval_direction = "favors D" if approval > 0 else "favors R"
-    print(f"Climate score: {climate:+.3f} ({climate_direction})")
-    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.1f}pp")
-    print(f"Approval score: {approval:+.3f} ({approval_direction})")
-    print(f"Approval adjustment: ±{abs(approval * APPROVAL_WEIGHT * 10):.1f}pp\n")
+    print(f"Climate score: {climate:+.2f} ({climate_direction})")
+    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.2f}pp")
+    print(f"Approval score: {approval:+.2f} ({approval_direction})")
+    print(f"Approval adjustment: ±{abs(approval * APPROVAL_WEIGHT * 10):.2f}pp\n")
 
     current_state = None
     for r in predictions:
@@ -564,8 +569,8 @@ if __name__ == "__main__":
         inc     = " [incumbent]" if r["is_incumbent"] else ""
         flip    = " ⚡FLIP" if r.get("winner") and r["is_flip"] else ""
         tossup  = " 🪙TOSSUP" if r.get("winner") and r["is_tossup"] else ""
-        econ_adj = f"{r['adjustment']:+.1f}pp"
-        appr_adj = f"{r['approval_adjustment']:+.1f}pp"
+        econ_adj = f"{r['adjustment']:+.2f}pp"
+        appr_adj = f"{r['approval_adjustment']:+.2f}pp"
         print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  lean: {r['lean']}%  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
 
     # Senate control projection
