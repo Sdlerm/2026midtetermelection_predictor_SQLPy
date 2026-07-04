@@ -49,10 +49,11 @@ def plot_race_margins():
 
     states, margins, colors, flips, y_labels, margin_errs = [], [], [], [], [], []
     for state, parties in sorted(seen.items()):
-        d = parties.get("D")
-        r = parties.get("R")
-        if d is None or r is None:
+        d_key = "D" if "D" in parties else ("I" if "I" in parties else None)
+        if d_key is None or "R" not in parties:
             continue
+        d = parties[d_key]
+        r = parties["R"]
         margin = d["projected"] - r["projected"]
         margin_err = math.sqrt((d.get("stderr") or 0) ** 2 + (r.get("stderr") or 0) ** 2)
         winner_data = d if margin > 0 else r
@@ -61,7 +62,7 @@ def plot_race_margins():
         margin_errs.append(margin_err)
         colors.append("#3a7abf" if margin > 0 else "#c0392b")
         flips.append(winner_data["is_flip"])
-        d_lbl  = "D*" if d["is_incumbent"] else "D"
+        d_lbl  = "D*" if d["is_incumbent"] else d_key
         r_lbl  = "R*" if r["is_incumbent"] else "R"
         d_last = d["name"].rsplit(" ", 1)[-1]
         r_last = r["name"].rsplit(" ", 1)[-1]
@@ -251,7 +252,8 @@ def plot_vote_shares():
     ax.set_xticks(list(x))
     ax.set_xticklabels(x_labels, fontsize=7)
     ax.set_ylabel("Projected vote share (%)")
-    ax.set_ylim(0, max(d_pcts + r_pcts) + 10)
+    top_with_err = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_errs + r_errs))
+    ax.set_ylim(0, top_with_err + 5)
     ax.set_title("2026 Senate Projected Vote Shares  (* = incumbent)", fontweight="bold")
     ax.legend()
 
