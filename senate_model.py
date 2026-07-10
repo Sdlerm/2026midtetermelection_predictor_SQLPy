@@ -109,7 +109,7 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int):
     con = get_connection()
     cur = con.cursor()
     cur.execute("""
-        SELECT p.pct, p.poll_date, COALESCE(po.credibility, 1.0)
+        SELECT p.pct, p.poll_date, p.sample_size, COALESCE(po.credibility, 1.0)
         FROM polls p
         LEFT JOIN pollsters po ON p.pollster_id = po.id
         WHERE p.race_id = ? AND p.candidate_id = ?
@@ -120,23 +120,35 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int):
     if not rows:
         return None, None
 
-    weighted_pcts = []
+    pcts = []
     weights = []
-    for pct, poll_date, cred in rows:
+    sample_sizes = []
+    for pct, poll_date, sample_size, cred in rows:
         w = cred * recency_weight(poll_date)
         if w > 0:
+            pcts.append(pct)
             weights.append(w)
-            weighted_pcts.append(pct * w)  # for mean
+            sample_sizes.append(sample_size)
 
     if not weights:
         return None, None
 
     w_sum = sum(weights)
-    mean = sum(weighted_pcts) / w_sum
+    mean = sum(w * p for w, p in zip(weights, pcts)) / w_sum
 
-    # Weighted variance (population version — conservative for error bars)
-    var = sum(w * (pct - mean)**2 for w, pct in zip(weights, [p/w for p,w in zip(weighted_pcts, weights)])) / w_sum
-    stderr = math.sqrt(var) if var > 0 else 0.0
+    if len(weights) == 1:
+        # Only one poll: no poll-to-poll spread to measure, so fall back to
+        # the binomial sampling error implied by that poll's sample size.
+        n = sample_sizes[0]
+        if n:
+            p = mean / 100
+            stderr = math.sqrt(p * (1 - p) / n) * 100
+        else:
+            stderr = 0.0  # sample size not recorded; nothing to estimate from
+    else:
+        # Weighted variance (uncorrected/population form — no small-sample bias correction applied)
+        var = sum(w * (p - mean)**2 for w, p in zip(weights, pcts)) / w_sum
+        stderr = math.sqrt(var) if var > 0 else 0.0
 
     return round(mean, 1), round(stderr, 2)
 
@@ -426,8 +438,6 @@ def predict_all_races(year=2026):
             incumbent_party = nominee_info["incumbent_party"]
             is_incumbent = (party == incumbent_party) # this is a simplification; in reality we should check if the incumbent is actually running for re-election, but we'll assume that if the incumbent's party is listed, then the nominee from that party is the incumbent for modeling purposes
             is_flip = False  # set after we know the winner
-
-            poll_avg, poll_stderr = weighted_average_and_stderr(race_id, candidate_id)
 
             finalists.append({
                 "state": state,
