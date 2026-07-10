@@ -1,7 +1,8 @@
 import os
 import csv
+import math
 from datetime import date
-
+from init_db import get_connection
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -25,6 +26,15 @@ STATES_WITH_2026_RACES = [
     "NE", "NH", "NJ", "NM", "OH", "OK", "OR", "RI", "SC", "SD",
     "TN", "TX", "VA", "WV", "WY",
 ]
+
+# Incumbent party for 2026 race states NOT tracked in senate_nominees.csv.
+# Used as the hold assumption for unpolled races. Derived manually — update
+# if a nominee row is later added for any of these states.
+UNTRACKED_HOLDS = {
+    "AL": "R", "CO": "D", "DE": "D", "IL": "D", "LA": "R",
+    "NJ": "D", "NM": "D", "OK": "R", "OR": "D", "RI": "D",
+    "TN": "R", "VA": "D", "WV": "R", "WY": "R",
+}
 
 # Independents who are expected to caucus with a major party if elected.
 # Osborn (NE-I) has stated he would caucus with Democrats.
@@ -100,9 +110,6 @@ def recency_weight(poll_date_str):
         ValueError: If the provided poll_date_str is invalid or cannot be parsed.
     """
     return math.exp(-LAMBDA * days_ago(poll_date_str))
-
-import math
-from init_db import get_connection
 
 def weighted_average_and_stderr(race_id: int, candidate_id: int):
     """
@@ -549,9 +556,31 @@ def project_senate_control(predictions, nominees_state_count):
         if r["is_flip"]:
             flips.append(r)
 
-    # Unpolled/untracked Class 2 seats (outside senate_nominees.csv or lacking polls) are
-    # assumed Republican holds — safe red seats are the ones that go unpolled.
-    projected_r    += SEATS_UP_2026 - len(seen_states)
+    # Unpolled/untracked 2026 seats: assume the incumbent party holds.
+    # Runs ONCE, after all predicted winners are counted — seen_states is
+    # complete at this point. Untracked states are safe seats by definition,
+    # but they are NOT all Republican — CO, DE, IL, NJ, NM, OR, RI are safe D.
+    for untracked_state in STATES_WITH_2026_RACES:
+        if untracked_state in seen_states:
+            continue
+        hold_party = UNTRACKED_HOLDS.get(untracked_state)
+        if hold_party == "D":
+            projected_d += 1
+        elif hold_party == "R":
+            projected_r += 1
+        else:
+            # Tracked in nominees CSV but produced no prediction (missing polls).
+            print(f"WARNING: {untracked_state} unassigned — no prediction and not in UNTRACKED_HOLDS")
+
+    # Invariant: every path through this function must account for exactly 100
+    # seats. Any double-count, missed state, or loop-nesting mistake dies loudly
+    # here instead of producing a quietly wrong forecast.
+    total = projected_r + projected_d
+    assert total == 100, (
+        f"Seat accounting broken: R={projected_r} + D={projected_d} = {total}, expected 100. "
+        f"seen_states={len(seen_states)}"
+    )
+
     not_called      = 0
     seats_remaining = 0
 
