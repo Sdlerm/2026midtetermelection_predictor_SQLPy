@@ -12,16 +12,23 @@ project/
 │   ├── senate.csv                  # Polling data — downloaded from FiveThirtyEight
 │   ├── senate_nominees.csv         # Ground truth: confirmed general election candidates
 │   ├── state_lean.csv              # State structural lean data
-│   └── president_approval_polls.csv # Presidential approval polling data
+│   ├── president_approval_polls.csv # Presidential approval polling data
+│   ├── 2018-senate-state.csv       # Historical results (summary format)
+│   ├── 2020-senate-state.csv       # Historical results (summary format)
+│   ├── 2022-senate-state.csv       # Historical results (summary format)
+│   └── 2024-senate-state.csv       # Historical results (MEDSL raw precinct format)
 ├── db/
 │   └── elections.db                # SQLite database — auto-created by init_db.py
 ├── init_db.py                      # Creates the database schema
 ├── senate_ingest.py                # Loads polling CSV into the database
 ├── fetch_economics.py              # Pulls economic indicators from FRED API
+├── load_historical.py              # Loads 2018/2020/2022/2024 Senate results (historical_results table)
 ├── senate_model.py                 # Weighted average + economic adjustment → predictions
-├── charts.py                       # Matplotlib visualizations (pop-up window)
+├── export_map_csv.py               # Exports predictions to map_data.csv for external mapping tools
+├── charts.py                       # Matplotlib visualizations (margins, seat count, vote shares)
 ├── dashboard.py                    # Streamlit web dashboard
 ├── wiring_explained.md             # Narrative explanation of the model's math
+├── CLAUDE.md                       # Context for Claude Code sessions in this repo
 └── README.md                       # This file
 ```
 
@@ -55,7 +62,7 @@ Get a free API key at [https://fred.stlouisfed.org/docs/api/api_key.html](https:
 
 The senate polling CSV is included in `data/senate.csv`. For updates:
 
-1. Go to [https://projects.fivethirtyeight.com/polls-page/data/senate_polls.csv](https://projects.fivethirtyeight.com/polls-page/data/senate_polls.csv)
+1. Go to https://www.nytimes.com/newsgraphics/polls/senate.csv
 2. Save the file as `data/senate.csv`
 
 ### 4. Nominees file
@@ -112,6 +119,19 @@ python fetch_economics.py
 
 Pulls the six FRED indicators and stores them in the `climate_factors` table. Requires a valid `FRED_API_KEY` in `.env`.
 
+### Step 3b — Load historical results (optional, one-time)
+
+```bash
+python load_historical.py
+```
+
+Loads 2018, 2020, 2022, and 2024 Senate election results into the `historical_results` table, for reference and future backtesting work. Each year is dispatched to one of two parsers depending on source format:
+
+- **Summary format** (2018/2020/2022) — one winner row + one runner-up row per race already; used as-is.
+- **Raw precinct format** (2024, MEDSL) — precinct-level rows are aggregated up to statewide vote totals per candidate first.
+
+Not part of the core prediction pipeline — safe to skip if you only want current-cycle projections. Re-running clears and reloads each year's rows, so it's idempotent.
+
 ### Step 4 — Run predictions (terminal output)
 
 ```bash
@@ -126,7 +146,7 @@ Prints each state's projected vote shares, the economic climate score, and which
 ```bash
 python charts.py
 ```
-Generates a margin bar chart and a vote-share comparison chart. Also saves `margins.png` and `vote_shares.png` to the project root.
+Generates a margin bar chart, a projected Senate seat-count chart, and a vote-share comparison chart. Also saves `margins.png`, `seat_count.png`, and `vote_shares.png` to the project root.
 
 **Streamlit dashboard (browser):**
 ```bash
@@ -236,6 +256,7 @@ After projecting individual races, the model calculates projected Senate control
 - **Nominees:** Manually maintained `data/senate_nominees.csv`
 - **State lean:** Manually maintained `data/state_lean.csv`
 - **Presidential approval:** FiveThirtyEight approval polls (`data/president_approval_polls.csv`)
+- **Historical results:** MEDSL precinct-level 2024 data and summary-format 2018/2020/2022 results (`data/*-senate-state.csv`), loaded via `load_historical.py`
 
 ---
 
@@ -250,7 +271,7 @@ The SQLite database (`db/elections.db`) contains the following tables:
 - **candidates** — candidates in each race (name, party, incumbency status)
 - **polls** — individual poll results with all metadata
 - **climate_factors** — economic indicators and climate scores
-- **historical_results** — past election outcomes (for future use)
+- **historical_results** — past election outcomes (2018/2020/2022/2024), loaded by `load_historical.py`
 
 ### File Naming Conventions
 
@@ -264,9 +285,8 @@ The SQLite database (`db/elections.db`) contains the following tables:
 
 ## Planned Enhancements
 
-- Presidential approval rating as a seventh climate factor
 - House race expansion (architecture extends cleanly)
-- Historical election results integration
+- Backtesting the model against the loaded 2018/2020/2022/2024 historical results
 - Automated data refresh workflows
 
 ---
