@@ -1,10 +1,14 @@
 state,party,name,incumbent_party
 AK,R,Dan Sullivan,R
 AK,D,Mary S. Peltola,R
+AL,R,Barry Moore,R
+AL,D,Everett Wess,R
 AR,R,Tom Cotton,R
 AR,D,Hallie Shoffner,R
 CO,R,Mark Baisley,D
 CO,D,John Hickenlooper,D
+DE,R,Michael S. Katz,D
+DE,D,Chris Coons,D
 FL,R,Ashley Moody,R
 FL,D,Alexander Vindman,R
 GA,D,Jon Ossoff,D
@@ -13,14 +17,18 @@ ID,R,James E. Risch,R
 ID,D,David Roth,R
 IA,R,Ashley Hinson,R
 IA,D,Josh Turek,R
+IL,R,Don Tracy,D
+IL,D,Juliana Stratton,D
 KS,R,Roger Marshall,R
 KS,D,Patrick Schmidt,R
 KY,R,Andy Barr,R
 KY,D,Charles Booker,R
+LA,R,Julia Letlow,R
+LA,D,Jamie Davis,R
 MA,R,John Deaton,D
 MA,D,Edward J. Markey,D
 ME,R,Susan M. Collins,R
-ME,D,Graham Platner,R
+ME,D,Troy Jackson	,R
 MI,D,Abdul El-Sayed,D
 MI,R,Mike Rogers,D
 MN,R,Michele Tafoya,D
@@ -35,13 +43,29 @@ NE,R,Pete Ricketts,R
 NE,I,Dan Osborn,R
 NH,R,John E. Sununu,D
 NH,D,Chris Pappas,D
+NJ,R,Justin Murphy,D
+NJ,D,Cory Booker,D
+NM,R,Larry Marker,D
+NM,D,Ben Ray Lujan,D
 OH,R,Jon Husted,R
 OH,D,Sherrod Brown,R
+OK,R,Kevin Hern,R
+OK,D,N'Kiyla Jasmine Thomas,R
+OR,R,David Smith,D
+OR,D,Jeffrey H. Merkley,D
+RI,D,Jack Reed,D
+RI,R,Raymond McKay,D
 SC,R,Lindsey Graham,R
 SC,D,Annie Andrews,R
 SD,R,Mike Rounds,R
 SD,D,Julian Beaudion,R
+TN,R,Bill Hagerty,R
+TN,D,Marquita Bradshaw,R
 TX,R,Ken Paxton,R
 TX,D,James Talarico,R
 VA,R,Glenn Youngkin,D
 VA,D,Mark R. Warner,D
+WV,R,Shelley Moore Capito,R
+WV,D,Rachel Fetty Anderson,R
+WY,R,Harriet Hageman,R
+WY,D,James A. Byrd,R

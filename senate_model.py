@@ -6,10 +6,10 @@ from datetime import date
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LEAN_ALPHA = 0.8    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
+LEAN_ALPHA = 0.80    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
-ECON_WEIGHT = 0.25    # how much economics nudges the poll average; tune this
-APPROVAL_WEIGHT = 0.10
+ECON_WEIGHT = 0.18    # how much economics nudges the poll average; tune this
+APPROVAL_WEIGHT = 0.04
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
@@ -105,7 +105,30 @@ import math
 from init_db import get_connection
 
 def weighted_average_and_stderr(race_id: int, candidate_id: int):
-    """Return (weighted_mean, weighted_stderr) or (None, None)."""
+    """
+    Compute the weighted average and standard error of polling percentages for
+    a specific candidate in a race.
+
+    This function retrieves all polls for the given race and candidate, applies
+    weights based on pollster credibility and poll recency, then calculates the
+    weighted mean percentage and its standard error. For a single poll, the
+    standard error is derived from binomial sampling error; for multiple polls,
+    it is computed from the weighted variance across polls.
+
+    Parameters
+    ----------
+    race_id : int
+        The unique identifier for the race
+    candidate_id : int
+        The unique identifier for the candidate
+
+    Returns
+    -------
+    tuple of (float, float) or (None, None)
+        A tuple containing the weighted average percentage (rounded to 1 decimal
+        place) and standard error (rounded to 2 decimal places). Returns
+        (None, None) if no valid polls are found or all weights are zero.
+    """
     con = get_connection()
     cur = con.cursor()
     cur.execute("""
@@ -150,7 +173,7 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int):
         var = sum(w * (p - mean)**2 for w, p in zip(weights, pcts)) / w_sum
         stderr = math.sqrt(var) if var > 0 else 0.0
 
-    return round(mean, 1), round(stderr, 2)
+    return round(mean, 2), round(stderr, 2)
 
 # ---------------------------------------------------------------------------
 # Economic climate score
@@ -254,12 +277,14 @@ def climate_adjustment(party, climate_score):
     """
     # Scale: a climate_score of 1.0 = full ECON_WEIGHT adjustment
     # e.g. ECON_WEIGHT=0.3 means max ±3 percentage points
+    # raw = climate_score * ECON_WEIGHT * 10
     raw = climate_score * ECON_WEIGHT * 10
 
     if party == "D":
         return round(raw, 2)
-    else:
+    if party == "R":
         return round(-raw, 2)  # inverse for R
+    return 0.0  # independents: no national-environment adjustment (untested assumption either way)
 
 def approval_adjustment(party, approval_score):
     """
@@ -271,8 +296,9 @@ def approval_adjustment(party, approval_score):
     raw = approval_score * APPROVAL_WEIGHT * 10
     if party == "D":
         return round(raw, 2)
-    else:
+    if party == "R":
         return round(-raw, 2)
+    return 0.0  # independents: no national-environment adjustment (matches climate_adjustment)
 
 def load_state_lean():
     """
@@ -313,8 +339,8 @@ def lean_baseline(state, party, state_lean):
     if margin is None:
         return 50.0 # Unknown state: neutral, no structural pull
 
-    dem_share = 50.0 + margin/2.0
-    rep_share = 50.0 - margin/2.0
+    dem_share = 50.00 + margin/2.00
+    rep_share = 50.00 - margin/2.00
 
     if party == "D":
         return dem_share
@@ -432,7 +458,7 @@ def predict_all_races(year=2026):
 
             lean = lean_baseline(state, party, state_lean)
             blended = LEAN_ALPHA*poll_avg + (1-LEAN_ALPHA)*lean
-            projected = round(blended + adjustment + approval_adj, 1)
+            projected = round(blended + adjustment + approval_adj, 2)
             #projected = round(poll_avg + adjustment, 1)
 
             incumbent_party = nominee_info["incumbent_party"]
@@ -445,7 +471,7 @@ def predict_all_races(year=2026):
                 "party": party,
                 "poll_avg": poll_avg,
                 "poll_stderr": poll_stderr,
-                "lean": round(lean, 1),
+                "lean": round(lean, 2),
                 "adjustment": adjustment,
                 "approval_adjustment": approval_adj,
                 "projected": projected,
@@ -496,8 +522,8 @@ def project_senate_control(predictions, nominees_state_count):
     """
     # Seats not up for election in 2026 (Class 1 + Class 3)
     # R holds 23, D holds 42 of the 65 not up
-    SAFE_R = 23
-    SAFE_D = 42
+    SAFE_R = 31
+    SAFE_D = 34
     SEATS_UP_2026 = 35  # Class 2 seats; used for seats_remaining (fills seat chart to 100)
 
     projected_r = SAFE_R
