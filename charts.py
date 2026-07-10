@@ -1,5 +1,7 @@
 import math
+
 import matplotlib
+
 try:
     matplotlib.use("macosx")
 except Exception:
@@ -31,7 +33,7 @@ def plot_race_margins():
         and displays it; does not return any value.
     """
     predictions, _, nominees_count = predict_all_races()
-    control = project_senate_control(predictions, nominees_count)
+    control = project_senate_control(predictions)
 
     seen = {}
     for r in predictions:
@@ -132,7 +134,7 @@ def plot_seat_count():
         None
     """
     predictions, _, nominees_count = predict_all_races()
-    control = project_senate_control(predictions, nominees_count)
+    control = project_senate_control(predictions)
 
     fig, ax = plt.subplots(figsize=(7, 3))
 

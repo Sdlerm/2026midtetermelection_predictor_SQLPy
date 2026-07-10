@@ -1,7 +1,8 @@
-import os
 import csv
 import math
+import os
 from datetime import date
+
 from init_db import get_connection
 
 # ---------------------------------------------------------------------------
@@ -84,7 +85,7 @@ def days_ago(poll_date_str):
         poll_date_str (str): The date in ISO format (YYYY-MM-DD) to calculate the difference from.
     Returns:
         int: The number of days between the provided date and today's date.
-    Raises (this refers to when function... ):
+    Raises:
         ValueError: If the provided date string is not in a valid ISO format.
     """
     poll_date = date.fromisoformat(poll_date_str)
@@ -479,6 +480,7 @@ def predict_all_races(year=2026):
                 "poll_avg": poll_avg,
                 "poll_stderr": poll_stderr,
                 "lean": round(lean, 2),
+                "blended": round(blended, 2),
                 "adjustment": adjustment,
                 "approval_adjustment": approval_adj,
                 "projected": projected,
@@ -520,7 +522,7 @@ def predict_all_races(year=2026):
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-def project_senate_control(predictions, nominees_state_count):
+def project_senate_control(predictions):
     """
     Projects final Senate seat counts and which party controls the chamber.
 
@@ -616,8 +618,9 @@ if __name__ == "__main__":
 
     climate_direction  = "favors D" if climate > 0 else "favors R"
     approval_direction = "favors D" if approval > 0 else "favors R"
+
     print(f"Climate score: {climate:+.2f} ({climate_direction})")
-    print(f"Econ adjustment: ±{abs(climate * ECON_WEIGHT * 10):.2f}pp")
+    print(f"Climate adjustment: ±{abs(climate * ECON_WEIGHT * 10):.2f}pp")
     print(f"Approval score: {approval:+.2f} ({approval_direction})")
     print(f"Approval adjustment: ±{abs(approval * APPROVAL_WEIGHT * 10):.2f}pp\n")
 
@@ -633,10 +636,10 @@ if __name__ == "__main__":
         tossup  = " 🪙TOSSUP" if r.get("winner") and r["is_tossup"] else ""
         econ_adj = f"{r['adjustment']:+.2f}pp"
         appr_adj = f"{r['approval_adjustment']:+.2f}pp"
-        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  lean: {r['lean']}%  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
+        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  blend: {r['blended']}%  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
 
     # Senate control projection
-    control = project_senate_control(predictions, nominees_count)
+    control = project_senate_control(predictions)
     print(f"\n{'─'*45}")
     print(f"  PROJECTED SENATE CONTROL: {control['control']}")
     if control['tiebreaker']:

@@ -1,9 +1,10 @@
-import plotly.graph_objects as go
-from senate_model import predict_all_races, project_senate_control, STATES_WITH_2026_RACES
-import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
+from senate_model import STATES_WITH_2026_RACES
 from senate_model import predict_all_races, project_senate_control
 
 st.set_page_config(page_title="2026 Senate Predictor", layout="wide")
@@ -88,7 +89,7 @@ def load_predictions():
         projected percentages, with sign based on whether the leader is Republican.
     """
     predictions, climate, nominees_count = predict_all_races()
-    control = project_senate_control(predictions, nominees_count)
+    control = project_senate_control(predictions)
 
     # Group by state only — do NOT assume a "D" and "R" key. A race can have
     # any combination of parties (e.g. NE 2026 is I vs R, no Dem candidate).
