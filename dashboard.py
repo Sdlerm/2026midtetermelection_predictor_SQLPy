@@ -1,5 +1,5 @@
-import matplotlib.patches as mpatches
-import matplotlib.pyplot as plt
+import math
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -46,12 +46,60 @@ Plots projection data into an interactive map in the dashboard.
         marker_line_color="white",
         colorbar_title="D margin",
         text=df["State"],
-        hovertemplate="%{text}: %{z:+.1f} margin<extra></extra>",
+        customdata=df[["Leader", "Leader %", "Challenger", "Challenger %"]],
+        hovertemplate=(
+            "<b>%{text}</b>  (%{z:+.1f} margin)"
+            "<br>%{customdata[0]}: %{customdata[1]}%"
+            "<br>%{customdata[2]}: %{customdata[3]}%"
+            "<extra></extra>"
+        ),
     ))
 
     fig.update_layout(
         geo=dict(scope="usa"),
         margin=dict(l=0, r=0, t=10, b=0),
+    )
+    return fig
+
+def plot_race_margins(df):
+    """
+    Interactive horizontal bar chart of leader margins per race. Error bars
+    show combined polling standard error (leader + challenger, independent).
+    """
+    colors = [PARTY_COLOR.get(p, "#7f8c8d") for p in df["Leader Party"]]
+    hover_text = [
+        f"{row['Leader']} {row['Leader %']}% vs {row['Challenger']} {row['Challenger %']}%"
+        + (" · ⚡ projected flip" if row["Flip"] == "⚡" else "")
+        for _, row in df.iterrows()
+    ]
+
+    fig = go.Figure(go.Bar(
+        x=df["Margin"],
+        y=df["State"],
+        orientation="h",
+        marker_color=colors,
+        error_x=dict(type="data", array=df["Margin StdErr"], visible=True, thickness=1, width=3),
+        text=hover_text,
+        hovertemplate="<b>%{y}</b>: %{x:+.1f} margin (±%{error_x.array:.1f})<br>%{text}<extra></extra>",
+    ))
+
+    # Dummy traces so the leader-party colors get a legend (the real trace
+    # above is a single series, colored per-bar).
+    for party in ["D", "R", "I"]:
+        if party in df["Leader Party"].values:
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None], mode="markers",
+                marker=dict(size=10, color=PARTY_COLOR[party]),
+                name=f"{party} leads",
+            ))
+
+    fig.add_vline(x=0, line_color="black", line_width=0.8)
+    fig.update_layout(
+        xaxis_title="Leader margin (positive = non-Republican leads)",
+        yaxis=dict(autorange="reversed"),
+        margin=dict(l=0, r=0, t=10, b=0),
+        height=len(df) * 28 + 150,
+        legend=dict(title=None),
     )
     return fig
 
@@ -111,6 +159,9 @@ def load_predictions():
         # Sign convention: positive = leader is not Republican, negative = Republican leads.
         # Keeps the chart's left/right spectrum meaningful even with an I candidate.
         margin = -lead_size if leader["party"] == "R" else lead_size
+        # Combined polling uncertainty on the margin, assuming leader/challenger
+        # poll error is independent.
+        margin_stderr = math.sqrt(leader["poll_stderr"] ** 2 + challenger["poll_stderr"] ** 2)
 
         def label(c):
             party = f"{c['party']}*" if c["is_incumbent"] else c["party"]
@@ -125,6 +176,7 @@ def load_predictions():
             "Challenger":     label(challenger),
             "Challenger %":   challenger["projected"],
             "Margin":         round(margin, 1),
+            "Margin StdErr":  round(margin_stderr, 1),
             "Flip":           "⚡" if leader.get("is_flip", False) else "",
         })
 
@@ -176,22 +228,7 @@ st.divider()
 
 # --- Margin chart ---
 st.subheader("Race margins")
-fig, ax = plt.subplots(figsize=(10, len(df) * 0.45 + 1.5))
-colors = [PARTY_COLOR.get(p, "#7f8c8d") for p in df["Leader Party"]]
-bars = ax.barh(df["State"], df["Margin"], color=colors, height=0.6)
-
-for i, (_, row) in enumerate(df.iterrows()):
-    if row["Flip"] == "⚡":
-        x = row["Margin"]
-        offset = 0.3 if x > 0 else -0.3
-        ax.text(x + offset, i, "⚡", va="center", fontsize=9)
-
-ax.axvline(0, color="black", linewidth=0.8)
-ax.set_xlabel("Leader margin (positive = non-Republican leads)")
-handles = [mpatches.Patch(color=c, label=f"{p} leads") for p, c in PARTY_COLOR.items()]
-ax.legend(handles=handles)
-plt.tight_layout()
-st.pyplot(fig)
+st.plotly_chart(plot_race_margins(df), use_container_width=True)
 
 st.divider()
 
