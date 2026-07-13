@@ -112,6 +112,28 @@ def recency_weight(poll_date_str):
     """
     return math.exp(-LAMBDA * days_ago(poll_date_str))
 
+def race_has_non_f_polls(race_id):
+    """
+    True if this race has at least one poll from a non-F-graded pollster.
+    Used for the per-race F exclusion rule: F polls are dropped from
+    averages ONLY when better polling exists in the same race, and the
+    check is race-level (not per-candidate) so both candidates' averages
+    are always built from the same poll-set criteria.
+    NULL grades (ungraded pollsters) count as non-F.
+    """
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute("""
+        SELECT EXISTS(
+            SELECT 1 FROM polls p
+            LEFT JOIN pollsters po ON p.pollster_id = po.id
+            WHERE p.race_id = ? AND COALESCE(po.grade, '') != 'F'
+        )
+    """, (race_id,))
+    result = bool(cur.fetchone()[0])
+    con.close()
+    return result
+
 def weighted_average_and_stderr(race_id: int, candidate_id: int):
     """
     Compute the weighted average and standard error of polling percentages for
@@ -140,21 +162,33 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int):
     con = get_connection()
     cur = con.cursor()
     cur.execute("""
-        SELECT p.pct, p.poll_date, p.sample_size, COALESCE(po.credibility, 1.0)
-        FROM polls p
-        LEFT JOIN pollsters po ON p.pollster_id = po.id
-        WHERE p.race_id = ? AND p.candidate_id = ?
-    """, (race_id, candidate_id))
+            SELECT p.pct, p.poll_date, p.sample_size, COALESCE(po.credibility, 1.0), po.grade
+            FROM polls p
+            LEFT JOIN pollsters po ON p.pollster_id = po.id
+            WHERE p.race_id = ? AND p.candidate_id = ?
+        """, (race_id, candidate_id))
     rows = cur.fetchall()
     con.close()
 
     if not rows:
         return None, None
 
+    # Per-race F exclusion: drop F-graded polls when the race has any
+    # non-F polling. If only F polls exist, keep them (sole-source fallback).
+    # BIAS LEDGER: the lone F pollster (Big Data Poll) leans R, so this
+    # rule nudges affected races' averages slightly D-ward where it fires.
+    if race_has_non_f_polls(race_id):
+        rows = [r for r in rows if (r[4] or "") != "F"]  # grade is column index 4
+        if not rows:
+            # This candidate was ONLY polled by F pollsters while the race has
+            # non-F polling — candidate drops out of the projection entirely.
+            # Must return a TUPLE: callers unpack (poll_avg, poll_stderr).
+            return None, None
+
     pcts = []
     weights = []
     sample_sizes = []
-    for pct, poll_date, sample_size, cred in rows:
+    for pct, poll_date, sample_size, cred, _grade in rows:
         w = cred * recency_weight(poll_date)
         if w > 0:
             pcts.append(pct)
@@ -284,8 +318,7 @@ def climate_adjustment(party, climate_score):
     climate_score: float in [-1, +1], positive = favors D
     """
     # Scale: a climate_score of 1.0 = full ECON_WEIGHT adjustment
-    # e.g. ECON_WEIGHT=0.3 means max ±3 percentage points
-    # raw = climate_score * ECON_WEIGHT * 10
+    # e.g. ECON_WEIGHT=0.18 means max ±1.8 percentage points
     raw = climate_score * ECON_WEIGHT * 10
 
     if party == "D":
@@ -526,11 +559,14 @@ def project_senate_control(predictions):
     """
     Projects final Senate seat counts and which party controls the chamber.
 
-    Seats not up in 2026: 65 total (R holds 30, D holds 35)
-    These are Class 1 and Class 3 senators not facing election.
+    Seats not up in 2026: 65 total (R holds 31, D holds 34).
+    These are Class 1 and Class 3 senators not facing election, minus the
+    FL/OH Class 3 seats vacated into 2026 special elections.
+    Derivation: current chamber is 53R–47D; of the 35 seats up, 22 are
+    R-held and 13 D-held (per senate_nominees.csv incumbent_party +
+    UNTRACKED_HOLDS), so not-up = 53−22 = 31 R and 47−13 = 34 D.
     """
-    # Seats not up for election in 2026 (Class 1 + Class 3)
-    # R holds 23, D holds 42 of the 65 not up
+    # Seats not up for election in 2026 — see derivation in docstring
     SAFE_R = 31
     SAFE_D = 34
     SEATS_UP_2026 = 35  # Class 2 seats; used for seats_remaining (fills seat chart to 100)

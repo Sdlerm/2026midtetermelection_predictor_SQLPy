@@ -58,10 +58,11 @@ def init_db():
 
     cur.executescript("""
         CREATE TABLE IF NOT EXISTS pollsters (
-            id               INTEGER PRIMARY KEY,
-            name             TEXT NOT NULL UNIQUE,
-            credibility      REAL NOT NULL DEFAULT 1.0,  -- 0.0 to 3.0, from 538 numeric grade
-            partisan_lean    TEXT                         -- 'D', 'R', or NULL
+        id               INTEGER PRIMARY KEY,
+        name             TEXT NOT NULL UNIQUE,
+        credibility      REAL NOT NULL DEFAULT 1.0,  -- 0.0 to 3.0, from 538 letter-grade mapping
+        grade            TEXT,                        -- 538 letter grade ('A+'..'F'); NULL = ungraded
+        partisan_lean    TEXT                         -- 'D', 'R', or NULL
         );
 
         CREATE TABLE IF NOT EXISTS races (
