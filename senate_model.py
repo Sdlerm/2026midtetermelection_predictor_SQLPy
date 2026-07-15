@@ -178,7 +178,7 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int):
     # BIAS LEDGER: the lone F pollster (Big Data Poll) leans R, so this
     # rule nudges affected races' averages slightly D-ward where it fires.
     if race_has_non_f_polls(race_id):
-        rows = [r for r in rows if (r[4] or "") != "F"]  # grade is column index 4
+        rows = [good_pollster for good_pollster in rows if (good_pollster[4] or "") != "F"]  # grade is column index 4
         if not rows:
             # This candidate was ONLY polled by F pollsters while the race has
             # non-F polling — candidate drops out of the projection entirely.
@@ -500,7 +500,6 @@ def predict_all_races(year=2026):
             lean = lean_baseline(state, party, state_lean)
             blended = LEAN_ALPHA*poll_avg + (1-LEAN_ALPHA)*lean
             projected = round(blended + adjustment + approval_adj, 2)
-            #projected = round(poll_avg + adjustment, 1)
 
             incumbent_party = nominee_info["incumbent_party"]
             is_incumbent = (party == incumbent_party) # this is a simplification; in reality we should check if the incumbent is actually running for re-election, but we'll assume that if the incumbent's party is listed, then the nominee from that party is the incumbent for modeling purposes
@@ -645,7 +644,44 @@ def project_senate_control(predictions):
         "flips": flips,
     }
 
+
+DIVIDER = "─" * 45
+
+
+def format_control_summary(control):
+    """
+    Builds the printable Senate-control summary as a list of lines.
+
+    Kept separate from project_senate_control() (pure calculation) and from
+    the printing loop below (I/O) so the summary text can be unit-tested or
+    reused (e.g. by dashboard.py) without capturing stdout, and so the
+    trailing "seats" line is fully assembled before it's printed instead of
+    relying on a fragile print(..., end="") / print() pairing.
+    """
+    lines = [
+        f"\n{DIVIDER}",
+        f"  PROJECTED SENATE CONTROL: {control['control']}",
+    ]
+    if control["tiebreaker"]:
+        lines.append("  (50-50 tie — Vance tiebreaker gives R control)")
+
+    seats_line = f"  R: {control['R']} seats  |  D: {control['D']} seats"
+    if control["not_called"] > 0:
+        seats_line += f"  |  not called: {control['not_called']}"
+    lines.append(seats_line)
+
+    if control["flips"]:
+        lines.append(f"\n  Projected flips ({len(control['flips'])}):")
+        lines.extend(
+            f"    ⚡ {f['state']}  {f['party']}  {f['name']}"
+            for f in control["flips"]
+        )
+
+    lines.append(DIVIDER)
+    return lines
+
 # After
+
 if __name__ == "__main__":
     predictions, climate, nominees_count = predict_all_races()
     approval = get_approval_score()  # queried separately rather than added to
@@ -676,17 +712,5 @@ if __name__ == "__main__":
 
     # Senate control projection
     control = project_senate_control(predictions)
-    print(f"\n{'─'*45}")
-    print(f"  PROJECTED SENATE CONTROL: {control['control']}")
-    if control['tiebreaker']:
-        print(f"  (50-50 tie — Vance tiebreaker gives R control)")
-    print(f"  R: {control['R']} seats  |  D: {control['D']} seats", end="")
-    if control['not_called'] > 0:
-        print(f"  |  not called: {control['not_called']}")
-    else:
-        print()
-    if control['flips']:
-        print(f"\n  Projected flips ({len(control['flips'])}):")
-        for f in control['flips']:
-            print(f"    ⚡ {f['state']}  {f['party']}  {f['name']}")
-    print(f"{'─'*45}")
+    print("\n".join(format_control_summary(control)))
+
