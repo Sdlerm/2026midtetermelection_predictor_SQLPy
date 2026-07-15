@@ -10,8 +10,8 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 LEAN_ALPHA = 0.80    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
-ECON_WEIGHT = 0.18    # how much economics nudges the poll average; tune this
-APPROVAL_WEIGHT = 0.04
+ECON_WEIGHT = 0.20    # how much economics nudges the poll average; tune this
+APPROVAL_WEIGHT = 0.06
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
