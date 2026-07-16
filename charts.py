@@ -1,4 +1,5 @@
 import math
+import os
 
 import matplotlib
 
@@ -9,6 +10,9 @@ except Exception:
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from senate_model import predict_all_races, project_senate_control
+
+CHARTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "charts")
+os.makedirs(CHARTS_DIR, exist_ok=True)
 
 def plot_race_margins():
     """
@@ -104,9 +108,10 @@ def plot_race_margins():
     ax.legend(handles=[d_patch, r_patch], loc="lower right")
 
     plt.tight_layout()
-    plt.savefig("margins.png", dpi=150)
+    out_path = os.path.join(CHARTS_DIR, "margins.png")
+    plt.savefig(out_path, dpi=150)
     plt.show(block=True)
-    print("Saved to margins.png")
+    print(f"Saved to {out_path}")
 
 
 def plot_seat_count():
@@ -164,9 +169,10 @@ def plot_seat_count():
     ax.legend(loc="lower right", fontsize=8)
 
     plt.tight_layout()
-    plt.savefig("seat_count.png", dpi=150)
+    out_path = os.path.join(CHARTS_DIR, "seat_count.png")
+    plt.savefig(out_path, dpi=150)
     plt.show(block=True)
-    print("Saved to seat_count.png")
+    print(f"Saved to {out_path}")
 
 
 def plot_vote_shares():
@@ -185,7 +191,7 @@ def plot_vote_shares():
 
     ### Notes
     - This function relies on `predict_all_races` to provide predictions for all Senate races.
-    - The chart is saved as `vote_shares.png` in the current working directory.
+    - The chart is saved as `vote_shares.png` in the `data/charts` directory.
     - The function assumes the predictions include the fields: "state", "party", "projected",
       "name", and "is_incumbent".
     - Incumbent candidates are marked with an asterisk (*) in the corresponding labels.
@@ -260,9 +266,10 @@ def plot_vote_shares():
     ax.legend()
 
     plt.tight_layout()
-    plt.savefig("vote_shares.png", dpi=150)
+    out_path = os.path.join(CHARTS_DIR, "vote_shares.png")
+    plt.savefig(out_path, dpi=150)
     plt.show(block=True)
-    print("Saved to vote_shares.png")
+    print(f"Saved to {out_path}")
 
 
 if __name__ == "__main__":
