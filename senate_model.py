@@ -460,7 +460,7 @@ def predict_all_races(year=2026):
 
     con = get_connection()
     cur = con.cursor()
-    cur.execute("SELECT id, state FROM races WHERE year = ? AND state != 'US'", (year,))
+    cur.execute("SELECT id, state FROM races WHERE year = ? AND state != 'US' AND district = ''", (year,))
     races = cur.fetchall()
     con.close()
 

@@ -66,12 +66,13 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS races (
-            id               INTEGER PRIMARY KEY,
-            year             INTEGER NOT NULL,
-            state            TEXT NOT NULL,               -- 2-letter abbreviation
-            is_competitive   INTEGER NOT NULL DEFAULT 0,
-            UNIQUE(year, state)
-        );
+        id               INTEGER PRIMARY KEY,
+        year             INTEGER NOT NULL,
+        state            TEXT NOT NULL,               -- 2-letter abbreviation
+        district         TEXT NOT NULL DEFAULT '',    -- '' = Senate; '01'-'53' zero-padded = House
+        is_competitive   INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(year, state, district)
+    );
 
         CREATE TABLE IF NOT EXISTS candidates (
             id               INTEGER PRIMARY KEY,

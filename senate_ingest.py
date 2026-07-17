@@ -15,7 +15,7 @@ def upsert_pollster(cursor, name, numeric_grade=None, partisan=None):
     try:
         credibility = float(numeric_grade) if pd.notna(numeric_grade) else 1.0
     except (ValueError, TypeError):
-        credibility = 1.0
+            credibility = 1.0
     # The partisan field can be "1", "DEM", "REP", or NaN.
     # Any non-null value means the poll was sponsored by a partisan actor.
     p = str(partisan).strip() if pd.notna(partisan) else ""
@@ -31,13 +31,16 @@ def upsert_pollster(cursor, name, numeric_grade=None, partisan=None):
     return cursor.fetchone()[0]
 
 
-def upsert_race(cursor, year, state):
+def upsert_race(cursor, year, state, district=""):
     cursor.execute("""
-        INSERT INTO races (year, state)
-        VALUES (?, ?)
-        ON CONFLICT(year, state) DO NOTHING
-    """, (year, state))
-    cursor.execute("SELECT id FROM races WHERE year = ? AND state = ?", (year, state))
+        INSERT INTO races (year, state, district)
+        VALUES (?, ?, ?)
+        ON CONFLICT(year, state, district) DO NOTHING
+    """, (year, state, district))
+    cursor.execute(
+        "SELECT id FROM races WHERE year = ? AND state = ? AND district = ?",
+        (year, state, district),
+    )
     return cursor.fetchone()[0]
 
 
@@ -287,9 +290,9 @@ if __name__ == "__main__":
         # while leaving historical cycles (e.g. 2024 in historical_results) intact.
         con = get_connection()
         cur = con.cursor()
-        cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026)")
-        cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026)")
-        cur.execute("DELETE FROM races WHERE year = 2026")
+        cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district = '')")
+        cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district = '')")
+        cur.execute("DELETE FROM races WHERE year = 2026 AND district = ''")
         con.commit()
         con.close()
         print("Cleared 2026 poll data.")
