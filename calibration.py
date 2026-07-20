@@ -73,7 +73,7 @@ SIGMA_LOCAL_MARGIN = math.sqrt(SIGMA_TOTAL_MARGIN**2 - SIGMA_NATIONAL_MARGIN**2)
 #     N = 10,000  ->  ±0.5 percentage points
 # Plenty of precision given the sigmas above carry far more real-world
 # uncertainty than that. Bump to 100_000 only if runtime stays trivial.
-N_SIMS = 100_000
+N_SIMS = 1_000_000
 
 # ---------------------------------------------------------------------
 # Housekeeping
@@ -86,7 +86,7 @@ N_SENATE_SEATS = 100
 # ---------------------------------------------------------------------
 # The date of the forecast. Used for display purposes.
 # (Samuel, 2026-07-11)
-FORECAST_DATE = "July 11, 2026"
+FORECAST_DATE = "July 20, 2026"
 
 # ---------------------------------------------------------------------
 # Display constants
@@ -112,16 +112,17 @@ SAFE_PROBABILITY_THRESHOLD = 0.95
 # (Samuel, 2026-07-11)
 TOSSUP_MARGIN_THRESHOLD = 5.0
 
+# Margin threshold for calling a race "lean" (i.e., within this many
+# percentage points). A "lean" race is MORE competitive than a "likely"
+# race, so its threshold must sit below LIKELY's.
+# (Samuel, 2026-07-11; was 15.0 — swapped with LIKELY 2026-07-20, the two
+# values were inverted and dashboard.py's rate() mislabeled 10-15pt races)
+LEAN_MARGIN_THRESHOLD = 10.0
+
 # Margin threshold for calling a race "likely" (i.e., within this many
 # percentage points).
-# (Samuel, 2026-07-11)
-# (Samuel, 2026-07-11)
-LIKELY_MARGIN_THRESHOLD = 10.0
-
-# Margin threshold for calling a race "lean" (i.e., within this many
-# percentage points).
-# (Samuel, 2026-07-11)
-LEAN_MARGIN_THRESHOLD = 15.0
+# (Samuel, 2026-07-11; was 10.0 — swapped with LEAN 2026-07-20, see above)
+LIKELY_MARGIN_THRESHOLD = 15.0
 
 # Margin threshold for calling a race "safe" (i.e., within this many
 # percentage points).

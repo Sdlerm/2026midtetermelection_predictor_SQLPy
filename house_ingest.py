@@ -44,9 +44,14 @@ def load_house_nominees(path=_HOUSE_NOMINEES_PATH):
         roster[(state, district, "D")] = {"name": dem}
         roster[(state, district, "R")] = {"name": rep}
 
+        dem_inc = pd.notna(row.get("dem_incumbent")) and str(row["dem_incumbent"]).strip() not in ("", "0")
+        rep_inc = pd.notna(row.get("rep_incumbent")) and str(row["rep_incumbent"]).strip() not in ("", "0")
+        roster[(state, district, "D")] = {"name": dem, "is_incumbent": dem_inc}
+        roster[(state, district, "R")] = {"name": rep, "is_incumbent": rep_inc}
+
         # Independent nominee is optional; include when present (future NE-style races)
         if pd.notna(row.get("ind_nominee")) and str(row["ind_nominee"]).strip():
-            roster[(state, district, "I")] = {"name": str(row["ind_nominee"]).strip()}
+            roster[(state, district, "I")] = {"name": str(row["ind_nominee"]).strip(), "is_incumbent": False}
 
     return roster, skipped
 
