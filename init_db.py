@@ -23,6 +23,19 @@ def get_connection():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
+def ensure_column(cur, table, column, coltype):
+    """Add `column` to `table` if this DB predates it.
+
+    Uses PRAGMA table_info to inspect existing columns, so it is safe to
+    call on every init_db() run (ALTER TABLE would error on a duplicate
+    column on a DB that already has it).
+    """
+    cols = [row[1] for row in cur.execute(f"PRAGMA table_info({table})")]
+    if column not in cols:
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+        print(f"Added '{column}' column to {table} table.")
+
+
 def init_db():
     """
     Initializes the database by creating necessary tables if they do not already exist.
@@ -109,6 +122,12 @@ def init_db():
             won              INTEGER NOT NULL DEFAULT 0
         );
     """)
+
+    # These columns were added after some databases were already created via
+    # CREATE TABLE IF NOT EXISTS above (a no-op on an existing table), so a
+    # pre-existing DB needs them backfilled explicitly.
+    ensure_column(cur, "races", "district", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(cur, "pollsters", "grade", "TEXT")
 
     con.commit()
     con.close()

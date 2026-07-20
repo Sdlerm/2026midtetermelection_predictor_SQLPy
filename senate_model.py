@@ -425,6 +425,33 @@ def load_nominees():
                 }
     return nominees
 
+def _finalize_race(finalists):
+    """
+    Shared post-processing for one race's finalists: sort by projection,
+    mark winner, detect flip, detect toss-up. Used by both the poll-based
+    path and the lean-only fallback path so the two can never drift apart.
+    Assumes len(finalists) >= 2.
+    """
+    finalists.sort(key=lambda x: x["projected"], reverse=True)
+    finalists[0]["winner"] = True
+    for f in finalists[1:]:
+        f["winner"] = False
+
+    winner = finalists[0]
+    winner["is_flip"] = (
+            winner["party"] != winner["incumbent_party"]
+            and winner["incumbent_party"] != ""
+    )
+    for f in finalists[1:]:
+        f["is_flip"] = False
+
+    margin = finalists[0]["projected"] - finalists[1]["projected"]
+    is_tossup = margin < TOSSUP_THRESHOLD_PP
+    for f in finalists:
+        f["is_tossup"] = is_tossup
+        f["margin"] = round(margin, 2)
+    return finalists
+
 # ---------------------------------------------------------------------------
 # Prediction
 # ---------------------------------------------------------------------------
@@ -508,9 +535,10 @@ def predict_all_races(year=2026):
             finalists.append({
                 "state": state,
                 "name": name,
-                "party": party,
+                 "party": party,
                 "poll_avg": poll_avg,
                 "poll_stderr": poll_stderr,
+                "has_polls": True,
                 "lean": round(lean, 2),
                 "blended": round(blended, 2),
                 "adjustment": adjustment,
@@ -520,34 +548,54 @@ def predict_all_races(year=2026):
                 "is_incumbent": is_incumbent,
             })
 
-        if not finalists:
+
+
+        # A race is poll-based only if BOTH finalists have poll averages.
+        # A lone polled candidate is a data gap, not a contest — discard and
+        # let the lean-only fallback below rebuild the whole race coherently.
+        if len(finalists) < 2:
             continue
 
-        # After
-        finalists.sort(key=lambda x: x["projected"], reverse=True)
-        finalists[0]["winner"] = True
-        for f in finalists[1:]:
-            f["winner"] = False
+        results.extend(_finalize_race(finalists))
 
-        # Flip detection — winner's party differs from incumbent party
-        winner = finalists[0]
-        winner["is_flip"] = (
-                winner["party"] != winner["incumbent_party"]
-                and winner["incumbent_party"] != ""
-        )
-        for f in finalists[1:]:
-            f["is_flip"] = False
-
-        # Toss-up detection — gap between 1st and 2nd place is too small to
-        # trust as a confident call. Only meaningful with 2+ finalists; a
-        # single-candidate race (data gap, not a real toss-up) is never tagged.
-        margin = finalists[0]["projected"] - finalists[1]["projected"] if len(finalists) > 1 else None
-        is_tossup = margin is not None and margin < TOSSUP_THRESHOLD_PP
-        for f in finalists:
-            f["is_tossup"] = is_tossup
-            f["margin"] = round(margin, 2) if margin is not None else None
-
-        results.extend(finalists)
+        # ---- Lean-only fallback ----------------------------------------------
+    # Any 2026 race state without a poll-based projection gets a structural
+    # one: lean baseline + national adjustments, i.e. the standard blend with
+    # the poll term unavailable (LEAN_ALPHA effectively 0). These rows carry
+    # has_polls=False and poll_stderr=None so downstream display can flag
+    # them honestly instead of dressing them up as polled projections.
+    projected_states = {r["state"] for r in results}
+    for state in STATES_WITH_2026_RACES:
+        if state in projected_states:
+            continue
+        finalists = []
+        for party in [p for (s, p) in nominees if s == state]:
+            info = nominees[(state, party)]
+            lean = lean_baseline(state, party, state_lean)
+            projected = round(
+                lean
+                + climate_adjustment(party, climate)
+                + approval_adjustment(party, approval), 2
+            )
+            finalists.append({
+                "state": state,
+                "name": info["name"],
+                "party": party,
+                "poll_avg": None,
+                "poll_stderr": None,
+                "has_polls": False,
+                "lean": round(lean, 2),
+                "blended": round(lean, 2),   # blend degenerates to pure lean
+                "adjustment": climate_adjustment(party, climate),
+                "approval_adjustment": approval_adjustment(party, approval),
+                "projected": projected,
+                "incumbent_party": info["incumbent_party"],
+                "is_incumbent": (party == info["incumbent_party"]),
+            })
+        if len(finalists) < 2:
+            print(f"WARNING: {state} has <2 nominees — no projection possible")
+            continue
+        results.extend(_finalize_race(finalists))
 
     return results, climate, nominees_state_count
 
@@ -597,6 +645,7 @@ def project_senate_control(predictions):
     # Runs ONCE, after all predicted winners are counted — seen_states is
     # complete at this point. Untracked states are safe seats by definition,
     # but they are NOT all Republican — CO, DE, IL, NJ, NM, OR, RI are safe D.
+    not_called = 0
     for untracked_state in STATES_WITH_2026_RACES:
         if untracked_state in seen_states:
             continue
@@ -606,19 +655,24 @@ def project_senate_control(predictions):
         elif hold_party == "R":
             projected_r += 1
         else:
-            # Tracked in nominees CSV but produced no prediction (missing polls).
+            # Tracked in nominees CSV but produced no prediction (missing
+            # polls) and not in UNTRACKED_HOLDS — leave it uncalled instead
+            # of guessing, so the invariant below still holds and callers
+            # (dashboard/charts/monte_carlo) don't crash on a data gap.
             print(f"WARNING: {untracked_state} unassigned — no prediction and not in UNTRACKED_HOLDS")
+            not_called += 1
 
     # Invariant: every path through this function must account for exactly 100
-    # seats. Any double-count, missed state, or loop-nesting mistake dies loudly
-    # here instead of producing a quietly wrong forecast.
-    total = projected_r + projected_d
+    # seats (R + D + not_called). Any double-count, missed state, or
+    # loop-nesting mistake dies loudly here instead of producing a quietly
+    # wrong forecast — but an ordinary data gap (a tracked state losing all
+    # its polls) degrades into "not called" rather than crashing.
+    total = projected_r + projected_d + not_called
     assert total == 100, (
-        f"Seat accounting broken: R={projected_r} + D={projected_d} = {total}, expected 100. "
-        f"seen_states={len(seen_states)}"
+        f"Seat accounting broken: R={projected_r} + D={projected_d} + "
+        f"not_called={not_called} = {total}, expected 100. seen_states={len(seen_states)}"
     )
 
-    not_called      = 0
     seats_remaining = 0
 
     if projected_r > 50:
@@ -708,7 +762,16 @@ if __name__ == "__main__":
         tossup  = " 🪙TOSSUP" if r.get("winner") and r["is_tossup"] else ""
         econ_adj = f"{r['adjustment']:+.2f}pp"
         appr_adj = f"{r['approval_adjustment']:+.2f}pp"
-        print(f"  {marker} {r['party']}  {r['name']:<32}  poll: {r['poll_avg']}%  blend: {r['blended']}%  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
+        # if r.get("has_polls", True):
+        #     detail = f"poll: {r['poll_avg']}%  blend: {r['blended']}%"
+        # else:
+        #     detail = f"lean-only: {r['lean']}%"
+        # print(f"  {marker} {r['party']}  {r['name']:<32}  {detail}  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
+        if r.get("has_polls", True):
+            detail = f"poll: {r['poll_avg']}%  blend: {r['blended']}%"
+        else:
+            detail = f"lean-only: {r['lean']}%"
+        print(f"  {marker} {r['party']}  {r['name']:<32}  {detail}  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
 
     # Senate control projection
     control = project_senate_control(predictions)

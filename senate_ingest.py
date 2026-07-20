@@ -12,21 +12,34 @@ _NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominee
 # Upsert functions return the relevant ID for use in foreign keys.
 # Inserts or updates pollster record in a SQLite database, returning the pollster ID.
 def upsert_pollster(cursor, name, numeric_grade=None, partisan=None):
+    # numeric_grade/partisan come from the ingest source CSV (senate.csv or
+    # house.csv), neither of which carries real ratings data — that comes
+    # from load_pollster_ratings.py. When this ingest has no rating for a
+    # pollster, credibility/partisan_lean must be left untouched on conflict
+    # (via COALESCE below) rather than reset to the unrated default; otherwise
+    # re-running senate_ingest.py or house_ingest.py after
+    # load_pollster_ratings.py silently wipes out real ratings for any
+    # pollster shared between the two ingest sources.
     try:
-        credibility = float(numeric_grade) if pd.notna(numeric_grade) else 1.0
+        credibility = float(numeric_grade) if pd.notna(numeric_grade) else None
     except (ValueError, TypeError):
-            credibility = 1.0
+        credibility = None
     # The partisan field can be "1", "DEM", "REP", or NaN.
     # Any non-null value means the poll was sponsored by a partisan actor.
     p = str(partisan).strip() if pd.notna(partisan) else ""
     partisan_lean = p if p not in ("", "nan") else None
+    # NOTE: COALESCE(excluded.credibility, ...) would NOT work here — the
+    # VALUES clause already resolves "excluded" to the coalesced 1.0 default
+    # before ON CONFLICT sees it, so the conflict branch needs the raw
+    # (possibly-None) parameters passed again to tell "no rating provided"
+    # apart from "explicitly insert the default".
     cursor.execute("""
         INSERT INTO pollsters (name, credibility, partisan_lean)
-        VALUES (?, ?, ?)
+        VALUES (?, COALESCE(?, 1.0), ?)
         ON CONFLICT(name) DO UPDATE SET
-            credibility   = excluded.credibility,
-            partisan_lean = excluded.partisan_lean
-    """, (name, credibility, partisan_lean))
+            credibility   = CASE WHEN ? IS NOT NULL THEN ? ELSE pollsters.credibility END,
+            partisan_lean = CASE WHEN ? IS NOT NULL THEN ? ELSE pollsters.partisan_lean END
+    """, (name, credibility, partisan_lean, credibility, credibility, partisan_lean, partisan_lean))
     cursor.execute("SELECT id FROM pollsters WHERE name = ?", (name,))
     return cursor.fetchone()[0]
 

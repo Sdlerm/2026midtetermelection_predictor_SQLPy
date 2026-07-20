@@ -37,16 +37,49 @@ Plots projection data into an interactive map in the dashboard.
             hovertemplate="%{text}: not yet tracked<extra></extra>",
         ))
 
+    # Split into two traces so lean-only races render visibly different
+    # (reduced opacity + explicit hover label). Shared zmin/zmax pins both
+    # traces to ONE color scale — without it each trace would normalize its
+    # own colors and a -42 lean-only WY would recalibrate red differently
+    # than a polled -9 OH.
+    polled    = df[df["Basis"] == "polls"]
+    lean_only = df[df["Basis"] == "lean only"]
+    zmin, zmax = df["Margin"].min(), df["Margin"].max()
+
+    if not lean_only.empty:
+        fig.add_trace(go.Choropleth(
+            locations=lean_only["State"],
+            locationmode="USA-states",
+            z=lean_only["Margin"],
+            colorscale="RdBu",
+            zmid=0,
+            zmin=zmin,
+            zmax=zmax,
+            marker_opacity=0.45,
+            marker_line_color="white",
+            showscale=False,
+            text=lean_only["State"],
+            customdata=lean_only[["Leader", "Leader %", "Challenger", "Challenger %"]],
+            hovertemplate=(
+                "<b>%{text}</b>  (%{z:+.1f} margin) · LEAN-ONLY, no polls"
+                "<br>%{customdata[0]}: %{customdata[1]}%"
+                "<br>%{customdata[2]}: %{customdata[3]}%"
+                "<extra></extra>"
+            ),
+        ))
+
     fig.add_trace(go.Choropleth(
-        locations=df["State"],
+        locations=polled["State"],
         locationmode="USA-states",
-        z=df["Margin"],
+        z=polled["Margin"],
         colorscale="RdBu",
         zmid=0,
+        zmin=zmin,
+        zmax=zmax,
         marker_line_color="white",
         colorbar_title="D margin",
-        text=df["State"],
-        customdata=df[["Leader", "Leader %", "Challenger", "Challenger %"]],
+        text=polled["State"],
+        customdata=polled[["Leader", "Leader %", "Challenger", "Challenger %"]],
         hovertemplate=(
             "<b>%{text}</b>  (%{z:+.1f} margin)"
             "<br>%{customdata[0]}: %{customdata[1]}%"
@@ -67,8 +100,13 @@ def plot_race_margins(df):
     show combined polling standard error (leader + challenger, independent).
     """
     colors = [PARTY_COLOR.get(p, "#7f8c8d") for p in df["Leader Party"]]
+    # Fold the ± into precomputed text: lean-only rows have Margin StdErr = None
+    # (NaN in the DataFrame) and would otherwise render as "±nan" in the hover.
+    # Plotly silently skips NaN entries in the error_x array, so lean-only bars
+    # simply show no error bar.
     hover_text = [
         f"{row['Leader']} {row['Leader %']}% vs {row['Challenger']} {row['Challenger %']}%"
+        + (f" · ±{row['Margin StdErr']:.1f} poll stderr" if pd.notna(row["Margin StdErr"]) else " · lean only, no polls")
         + (" · ⚡ projected flip" if row["Flip"] == "⚡" else "")
         for _, row in df.iterrows()
     ]
@@ -80,7 +118,7 @@ def plot_race_margins(df):
         marker_color=colors,
         error_x=dict(type="data", array=df["Margin StdErr"], visible=True, thickness=1, width=3),
         text=hover_text,
-        hovertemplate="<b>%{y}</b>: %{x:+.1f} margin (±%{error_x.array:.1f})<br>%{text}<extra></extra>",
+        hovertemplate="<b>%{y}</b>: %{x:+.1f} margin<br>%{text}<extra></extra>",
     ))
 
     # Dummy traces so the leader-party colors get a legend (the real trace
@@ -160,8 +198,16 @@ def load_predictions():
         # Keeps the chart's left/right spectrum meaningful even with an I candidate.
         margin = -lead_size if leader["party"] == "R" else lead_size
         # Combined polling uncertainty on the margin, assuming leader/challenger
-        # poll error is independent.
-        margin_stderr = math.sqrt(leader["poll_stderr"] ** 2 + challenger["poll_stderr"] ** 2)
+        # poll error is independent. Lean-only races have poll_stderr=None —
+        # they get NO error bar (None), not a zero-width one that would claim
+        # false certainty.
+        has_polls = leader.get("has_polls", True) and challenger.get("has_polls", True)
+        if has_polls:
+            margin_stderr = round(math.sqrt(
+                (leader["poll_stderr"] or 0) ** 2 + (challenger["poll_stderr"] or 0) ** 2
+            ), 1)
+        else:
+            margin_stderr = None
 
         def label(c):
             party = f"{c['party']}*" if c["is_incumbent"] else c["party"]
@@ -176,7 +222,8 @@ def load_predictions():
             "Challenger":     label(challenger),
             "Challenger %":   challenger["projected"],
             "Margin":         round(margin, 1),
-            "Margin StdErr":  round(margin_stderr, 1),
+            "Margin StdErr":  margin_stderr,
+            "Basis":          "polls" if has_polls else "lean only",
             "Flip":           "⚡" if leader.get("is_flip", False) else "",
         })
 
@@ -259,10 +306,10 @@ def color_margin(val):
     color = "58,122,191" if val > 0 else "192,57,43"
     return f"background-color: rgba({color},{intensity/255:.2f})"
 
-styled = (df[["State", "Leader", "Leader %", "Challenger", "Challenger %", "Margin", "Flip"]]
-            .style
-            .map(color_margin, subset=["Margin"])
-            .format({"Margin": lambda v: f"{v:+.1f}"}))
+styled = (df[["State", "Leader", "Leader %", "Challenger", "Challenger %", "Margin", "Basis", "Flip"]]
+          .style
+          .map(color_margin, subset=["Margin"])
+          .format({"Margin": lambda v: f"{v:+.1f}"}))
 st.dataframe(styled, width="stretch", hide_index=True)
 
 st.divider()
@@ -279,6 +326,9 @@ with c2:
     st.metric(f"{row['Challenger']}", f"{row['Challenger %']}%")
 
 margin_label = f"{abs(row['Margin'])} {'non-R' if row['Margin'] > 0 else 'R'}"
+if row["Basis"] == "lean only":
+    st.caption("📐 Lean-only projection — no polling exists for this race; "
+               "numbers derive from structural lean + national adjustments.")
 if row["Flip"] == "⚡":
     st.caption("⚡ Projected flip from current party")
 st.progress(

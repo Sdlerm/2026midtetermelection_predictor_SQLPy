@@ -30,9 +30,10 @@ def load_pollster_ratings(filepath=RATINGS_PATH):
     Matches on exact pollster name — safe because pollster_ratings.csv was
     generated FROM senate.csv, so the names are identical by construction.
 
-    IMPORTANT: must run AFTER senate_ingest.py. The ingest's upsert_pollster
-    overwrites credibility from senate.csv's (empty) numeric_grade column,
-    resetting everything to 1.0. This script is what makes credibility real.
+    Safe to run before or after senate_ingest.py / house_ingest.py: both
+    ingests' upsert_pollster leaves credibility/grade untouched when their
+    source CSV has no rating data, instead of resetting it to the unrated
+    default. This script is what makes credibility real.
     """
     df = pd.read_csv(filepath)
 
