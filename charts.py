@@ -10,6 +10,10 @@ except Exception:
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from senate_model import predict_all_races, project_senate_control
+from house_model import predict_house_races
+
+TOTAL_HOUSE_SEATS = 435
+HOUSE_MAJORITY = 218
 
 CHARTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "charts")
 os.makedirs(CHARTS_DIR, exist_ok=True)
@@ -68,7 +72,7 @@ def plot_race_margins():
         margin_errs.append(margin_err)
         colors.append("#3a7abf" if margin > 0 else "#c0392b")
         flips.append(winner_data["is_flip"])
-        d_lbl  = "D*" if d["is_incumbent"] else d_key
+        d_lbl  = d_key + "*" if d["is_incumbent"] else d_key
         r_lbl  = "R*" if r["is_incumbent"] else "R"
         d_last = d["name"].rsplit(" ", 1)[-1]
         r_last = r["name"].rsplit(" ", 1)[-1]
@@ -110,7 +114,6 @@ def plot_race_margins():
     plt.tight_layout()
     out_path = os.path.join(CHARTS_DIR, "margins.png")
     plt.savefig(out_path, dpi=150)
-    plt.show(block=True)
     print(f"Saved to {out_path}")
 
 
@@ -171,7 +174,6 @@ def plot_seat_count():
     plt.tight_layout()
     out_path = os.path.join(CHARTS_DIR, "seat_count.png")
     plt.savefig(out_path, dpi=150)
-    plt.show(block=True)
     print(f"Saved to {out_path}")
 
 
@@ -251,7 +253,7 @@ def plot_vote_shares():
 
     x_labels = []
     for state, d_key, d_info, r_info, _ in rows:
-        d_lbl  = "D*" if d_info["is_incumbent"] else d_key
+        d_lbl  = d_key + "*" if d_info["is_incumbent"] else d_key
         r_lbl  = "R*" if r_info["is_incumbent"] else "R"
         d_last = d_info["name"].rsplit(" ", 1)[-1]
         r_last = r_info["name"].rsplit(" ", 1)[-1]
@@ -268,7 +270,247 @@ def plot_vote_shares():
     plt.tight_layout()
     out_path = os.path.join(CHARTS_DIR, "vote_shares.png")
     plt.savefig(out_path, dpi=150)
-    plt.show(block=True)
+    print(f"Saved to {out_path}")
+
+
+def _house_rows():
+    """
+    Group Tier 1 House predictions into one row per district for plotting.
+
+    Pairs each polled district's Democratic-side candidate (D, or I when no D
+    is running) with its Republican candidate, mirroring the pairing logic the
+    Senate charts use. Districts without both sides polled are skipped —
+    house_model already dropped one-sided races, but a D/I-less or R-less
+    multi-way race could still slip through.
+
+    Returns
+    -------
+    list of tuple
+        (race, d_key, d_info, r_info, margin) sorted by D margin, descending.
+        d_info / r_info are dicts with projected, name, is_incumbent, is_flip,
+        winner, and stderr keys; margin is D projected minus R projected.
+    """
+    predictions, _, _ = predict_house_races()
+
+    seen = {}
+    for r in predictions:
+        race = r["race"]
+        if race not in seen:
+            seen[race] = {}
+        seen[race][r["party"]] = {
+            "projected":    r["projected"],
+            "name":         r["name"],
+            "is_incumbent": r["is_incumbent"],
+            "is_flip":      r.get("is_flip", False),
+            "winner":       r.get("winner", False),
+            "stderr":       r.get("poll_stderr"),
+        }
+
+    rows = []
+    for race in sorted(seen):
+        parties = seen[race]
+        d_key = "D" if "D" in parties else ("I" if "I" in parties else None)
+        if d_key is None or "R" not in parties:
+            continue
+        d_info = parties[d_key]
+        r_info = parties["R"]
+        margin = d_info["projected"] - r_info["projected"]
+        rows.append((race, d_key, d_info, r_info, margin))
+
+    rows.sort(key=lambda row: row[4], reverse=True)
+    return rows
+
+
+def plot_house_vote_shares():
+    """
+    Plots projected vote shares for Democratic and Republican candidates in
+    the polled 2026 House districts (Tier 1).
+
+    Same layout as the Senate vote-shares chart: paired bars per district with
+    error bars for polling uncertainty, a 50% reference line, percentage
+    labels, incumbency asterisks, and FLIP! markers above districts where the
+    projected winner's party differs from the incumbent's. Figure width scales
+    with the number of polled districts.
+
+    The chart is saved as `house_vote_shares.png` in the `data/charts`
+    directory. If no polled districts are available (house_ingest.py not run),
+    prints a notice and returns without plotting.
+    """
+    rows = _house_rows()
+    if not rows:
+        print("No polled House races found — run house_ingest.py first.")
+        return
+
+    d_pcts = [row[2]["projected"] for row in rows]
+    r_pcts = [row[3]["projected"] for row in rows]
+    d_errs = [row[2]["stderr"] or 0 for row in rows]
+    r_errs = [row[3]["stderr"] or 0 for row in rows]
+    x = range(len(rows))
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=(max(10, len(rows) * 0.72), 7))
+    d_bars = ax.bar([i - width / 2 for i in x], d_pcts, width, yerr=d_errs, capsize=3,
+                    color="#3a7abf", label="Democrat", ecolor="#666666")
+    r_bars = ax.bar([i + width / 2 for i in x], r_pcts, width, yerr=r_errs, capsize=3,
+                    color="#c0392b", label="Republican", ecolor="#666666")
+    ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, label="50% threshold")
+
+    ax.bar_label(d_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#1a4a7a")
+    ax.bar_label(r_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#8b0000")
+
+    for i, (_, d_key, d_info, r_info, margin) in enumerate(rows):
+        is_flip = d_info.get("is_flip", False) or r_info.get("is_flip", False)
+        if not is_flip:
+            continue
+        top = max(d_pcts[i] + d_errs[i], r_pcts[i] + r_errs[i])
+        ax.text(i, top + 2.5, "FLIP!", ha="center", va="bottom", fontsize=7,
+                fontweight="bold", color="#3a7abf" if margin > 0 else "#c0392b")
+
+    x_labels = []
+    for race, d_key, d_info, r_info, _ in rows:
+        d_lbl  = d_key + "*" if d_info["is_incumbent"] else d_key
+        r_lbl  = "R*" if r_info["is_incumbent"] else "R"
+        d_last = d_info["name"].rsplit(" ", 1)[-1]
+        r_last = r_info["name"].rsplit(" ", 1)[-1]
+        x_labels.append(f"{race}\n{d_lbl} {d_last}\n{r_lbl} {r_last}")
+
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(x_labels, fontsize=6.5)
+    ax.set_ylabel("Projected vote share (%)")
+    top_with_err = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_errs + r_errs))
+    ax.set_ylim(0, top_with_err + 6)
+    ax.set_title(f"2026 House Projected Vote Shares — Tier 1, {len(rows)} polled districts  (* = incumbent)",
+                 fontweight="bold")
+    ax.legend()
+
+    plt.tight_layout()
+    out_path = os.path.join(CHARTS_DIR, "house_vote_shares.png")
+    plt.savefig(out_path, dpi=150)
+    print(f"Saved to {out_path}")
+
+
+def plot_house_race_margins():
+    """
+    Generate a horizontal bar plot of projected vote margins for the polled
+    2026 House districts (Tier 1).
+
+    Same layout as the Senate margins chart: one bar per district (D margin,
+    positive = Dem leads), colored by leading party, with error bars combining
+    both candidates' polling uncertainty in quadrature, incumbency asterisks
+    in the labels, and FLIP annotations where the projected winner's party
+    differs from the incumbent's.
+
+    The chart is saved as `house_margins.png` in the `data/charts` directory.
+    If no polled districts are available (house_ingest.py not run), prints a
+    notice and returns without plotting.
+    """
+    rows = _house_rows()
+    if not rows:
+        print("No polled House races found — run house_ingest.py first.")
+        return
+
+    races, margins, colors, flips, y_labels, margin_errs = [], [], [], [], [], []
+    for race, d_key, d_info, r_info, margin in rows:
+        margin_err = math.sqrt((d_info.get("stderr") or 0) ** 2 + (r_info.get("stderr") or 0) ** 2)
+        winner_data = d_info if margin > 0 else r_info
+        races.append(race)
+        margins.append(margin)
+        margin_errs.append(margin_err)
+        colors.append("#3a7abf" if margin > 0 else "#c0392b")
+        flips.append(winner_data["is_flip"])
+        d_lbl  = d_key + "*" if d_info["is_incumbent"] else d_key
+        r_lbl  = "R*" if r_info["is_incumbent"] else "R"
+        d_last = d_info["name"].rsplit(" ", 1)[-1]
+        r_last = r_info["name"].rsplit(" ", 1)[-1]
+        y_labels.append(f"{race}  {d_lbl} {d_last} / {r_lbl} {r_last}")
+
+    fig, ax = plt.subplots(figsize=(10, len(races) * 0.4 + 2))
+    y = range(len(races))
+    ax.barh(y, margins, xerr=margin_errs, color=colors, height=0.6,
+            ecolor="#666666", capsize=3)
+    ax.axvline(0, color="black", linewidth=0.8)
+
+    # Flip labels
+    for i, (margin, err, is_flip) in enumerate(zip(margins, margin_errs, flips)):
+        if is_flip:
+            offset = err + 0.4 if margin > 0 else -(err + 0.4)
+            ax.text(margin + offset, i, "FLIP", va="center",
+                    ha="left" if margin > 0 else "right",
+                    fontsize=7, fontweight="bold",
+                    color="#3a7abf" if margin > 0 else "#c0392b")
+
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(y_labels, fontsize=7)
+    ax.invert_yaxis()                # biggest D margin at the top
+    ax.set_xlabel("D margin (positive = Dem leads)")
+
+    ax.set_title(f"2026 House Race Margins — Tier 1, {len(races)} polled districts",
+                 fontweight="bold", fontsize=10)
+
+    d_patch = mpatches.Patch(color="#3a7abf", label="Dem leads")
+    r_patch = mpatches.Patch(color="#c0392b", label="Rep leads")
+    ax.legend(handles=[d_patch, r_patch], loc="lower right")
+
+    plt.tight_layout()
+    out_path = os.path.join(CHARTS_DIR, "house_margins.png")
+    plt.savefig(out_path, dpi=150)
+    print(f"Saved to {out_path}")
+
+
+def plot_house_party_control():
+    """
+    Plots a horizontal bar chart of projected party leads in the polled 2026
+    House districts (Tier 1), against the 435-seat chamber and the 218-seat
+    majority line.
+
+    This is deliberately NOT a chamber-control projection — house_model.py
+    covers only the polled districts (Tier 1), and ~39 districts cannot say
+    who holds the House. The unmodeled remainder is shown in gray so the gap
+    between "districts we can project" and "districts that decide control" is
+    visible rather than hidden. A real control projection arrives with Tier 2
+    (CPVI district lean + generic ballot + climate).
+
+    The chart is saved as `house_control.png` in the `data/charts` directory.
+    If no polled districts are available (house_ingest.py not run), prints a
+    notice and returns without plotting.
+    """
+    rows = _house_rows()
+    if not rows:
+        print("No polled House races found — run house_ingest.py first.")
+        return
+
+    d_leads = sum(1 for _, _, d_info, r_info, margin in rows if margin > 0)
+    r_leads = len(rows) - d_leads
+    flips = sum(
+        1 for _, _, d_info, r_info, _ in rows
+        if d_info["is_flip"] or r_info["is_flip"]
+    )
+    unmodeled = TOTAL_HOUSE_SEATS - d_leads - r_leads
+
+    fig, ax = plt.subplots(figsize=(9, 3))
+
+    ax.barh(0, d_leads, color="#3a7abf", height=0.5, label=f"Dem leads ({d_leads})")
+    ax.barh(0, r_leads, color="#c0392b", height=0.5,
+            left=d_leads, label=f"Rep leads ({r_leads})")
+    ax.barh(0, unmodeled, color="#cccccc", height=0.5,
+            left=d_leads + r_leads, label=f"Unmodeled ({unmodeled})")
+
+    ax.axvline(HOUSE_MAJORITY, color="black", linewidth=1.2, linestyle="--",
+               label=f"{HOUSE_MAJORITY}-seat majority")
+    ax.set_xlim(0, TOTAL_HOUSE_SEATS)
+    ax.set_yticks([])
+    ax.set_xlabel(f"House seats  (D + R + unmodeled = {TOTAL_HOUSE_SEATS})")
+
+    title = (f"House Tier 1: leads in {len(rows)} polled districts — "
+             f"NOT a chamber projection\n"
+             f"D: {d_leads}  R: {r_leads}  flips: {flips}  ·  "
+             f"{unmodeled} districts unmodeled (Tier 2 pending)")
+    ax.set_title(title, fontweight="bold", fontsize=10)
+    ax.legend(loc="lower right", fontsize=8, ncols=2)
+
+    plt.tight_layout()
+    out_path = os.path.join(CHARTS_DIR, "house_control.png")
+    plt.savefig(out_path, dpi=150)
     print(f"Saved to {out_path}")
 
 
@@ -276,3 +518,9 @@ if __name__ == "__main__":
     plot_race_margins()
     plot_seat_count()
     plot_vote_shares()
+    plot_house_race_margins()
+    plot_house_vote_shares()
+    plot_house_party_control()
+    # Single show at the end: starting/stopping the macosx event loop once per
+    # chart crashes the interpreter (GIL error in start_main_loop) on py3.13.
+    plt.show(block=True)

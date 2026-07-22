@@ -1,9 +1,30 @@
 import os
 import pandas as pd
+from pandas.errors import ParserError
 from init_db import get_connection
 from senate_ingest import upsert_race, upsert_candidate
 
 DATA = os.path.join(os.path.dirname(__file__), "data")
+
+SUMMARY_COLUMNS = {
+    "State",
+    "Winner",
+    "Winner_Party",
+    "Winner_Pct",
+    "Runner_Up",
+    "Runner_Up_Party",
+    "Runner_Up_Pct",
+}
+
+RAW_COLUMNS = {
+    "state_po",
+    "candidate",
+    "party_simplified",
+    "votes",
+    "totalvotes",
+    "stage",
+    "special",
+}
 
 # Full state name -> 2-letter abbreviation. Only needed for the "summary"
 # format (2018/2020/2022), which uses full names. The "raw" 2024 MEDSL file
@@ -57,15 +78,46 @@ def classify_party_summary(party_label):
     return "I"
 
 
+def read_validated_csv(filepath, required_columns, format_name):
+    with open(filepath, "rb") as f:
+        prefix = f.read(2048).lstrip().lower()
+
+    if prefix.startswith(b"<!doctype html") or prefix.startswith(b"<html"):
+        raise ValueError(
+            f"{filepath} is an HTML page, not a CSV. This usually happens when "
+            "a GitHub file preview page is saved instead of the raw file. "
+            "Replace it with the raw CSV contents, then rerun this script."
+        )
+
+    try:
+        df = pd.read_csv(filepath)
+    except ParserError as exc:
+        raise ValueError(
+            f"Could not parse {filepath} as {format_name} CSV. Check that the "
+            "file is comma-delimited raw data with a single header row."
+        ) from exc
+
+    missing = sorted(required_columns - set(df.columns))
+    if missing:
+        raise ValueError(
+            f"{filepath} is not a valid {format_name} CSV. Missing required "
+            f"column(s): {', '.join(missing)}"
+        )
+
+    return df
+
+
 # ---------------------------------------------------------------------------
 # Loader for the 2024-style "raw" format: one row per candidate per county
 # line, requiring the fusion-voting collapse and top-2-by-votes filter.
 # ---------------------------------------------------------------------------
 
 def load_historical_senate_raw(filepath, year):
-    df = pd.read_csv(filepath)
+    df = read_validated_csv(filepath, RAW_COLUMNS, "raw senate results")
 
-    df = df[(df["stage"] == "GEN") & (df["special"] == False)].copy()
+    general = df["stage"].astype(str).str.upper().eq("GEN")
+    regular = df["special"].astype(str).str.upper().eq("FALSE")
+    df = df[general & regular].copy()
 
     agg_rows = []
     for (state_po, candidate), g in df.groupby(["state_po", "candidate"], sort=False):
@@ -118,9 +170,9 @@ def load_historical_senate_raw(filepath, year):
 # ---------------------------------------------------------------------------
 
 def load_historical_senate_summary(filepath, year):
-    df = pd.read_csv(filepath)
+    df = read_validated_csv(filepath, SUMMARY_COLUMNS, "summary senate results")
 
-    special_mask = df["State"].str.contains(r"\(Special\)", regex=True)
+    special_mask = df["State"].astype(str).str.contains(r"\(Special\)", regex=True)
     if special_mask.any():
         dropped = df.loc[special_mask, "State"].tolist()
         print(f"  Dropping {special_mask.sum()} special election row(s): {dropped}")
