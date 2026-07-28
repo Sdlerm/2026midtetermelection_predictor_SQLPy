@@ -10,12 +10,13 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 LEAN_ALPHA = 0.80    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
-ECON_WEIGHT = 0.20    # how much economics nudges the poll average; tune this
-APPROVAL_WEIGHT = 0.06
+ECON_WEIGHT = 0.18    # how much economics nudges the poll average; tune this
+APPROVAL_WEIGHT = 0.05
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
 TOSSUP_THRESHOLD_PP = 1.1 #if the finalists shares are w/i 1pp, flag as "toss-up"
+
 
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
@@ -751,7 +752,9 @@ if __name__ == "__main__":
     print(f"Approval adjustment: ±{abs(approval * APPROVAL_WEIGHT * 10):.2f}pp\n")
 
     current_state = None
-    for r in predictions:
+    # Stable sort by state so each state's nominee rows stay grouped (and keep
+    # their within-state order) while states print in alphabetical order.
+    for r in sorted(predictions, key=lambda p: p["state"]):
         if r["state"] != current_state:
             current_state = r["state"]
             print(f"\n── {current_state} ──────────────")
