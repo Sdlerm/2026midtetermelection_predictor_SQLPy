@@ -136,6 +136,45 @@ def load_house_sim():
     return mc_house.simulate(races, base_d, base_r)
 
 
+def load_sim_or_error(loader, chamber):
+    """
+    Run a simulation loader, converting a seat-identity failure into a message
+    instead of a crash.
+
+    baseline_seats() raises ValueError when a chamber's seats don't sum
+    correctly — deliberately, so a false forecast can never be returned. But an
+    uncaught raise here would take down the ENTIRE page: one chamber's data gap
+    would blank the other chamber's numbers and both maps, which are perfectly
+    valid. Catching it per chamber keeps the failure loud and localized.
+
+    Only ValueError is caught, and only around the loader. Anything else is a
+    real bug and still propagates — a bare `except Exception` here would hide
+    exactly the failures worth seeing.
+
+    The cost of a failed chamber is near zero: baseline_seats raises before
+    simulate() runs, so nothing is wasted re-deriving it on each rerun (a
+    raising function is never cached).
+
+    Returns (results, None) on success, (None, message) on identity failure.
+    """
+    try:
+        return loader(), None
+    except ValueError as err:
+        return None, str(err)
+
+
+def render_sim_error(chamber, message):
+    """Standard treatment for a chamber whose seat identity is broken."""
+    st.error(
+        f"**{chamber} simulation unavailable — seat identity check failed.**\n\n"
+        f"No probabilities are shown for the {chamber} because the seat totals "
+        f"do not add up, and a P(control) computed over the wrong number of "
+        f"seats would be confidently wrong rather than merely imprecise. "
+        f"Everything else on this page is unaffected.\n\n"
+        f"```\n{message}\n```"
+    )
+
+
 @st.cache_data(ttl=300)
 def load_predictions():
     """Senate predictions -> display DataFrame + climate + control projection.
@@ -264,14 +303,28 @@ def plot_margin_map(df):
 
     polled    = df[df["Basis"] == "polls"]
     lean_only = df[df["Basis"] == "lean only"]
-    zmin, zmax = df["Margin"].min(), df["Margin"].max()
+
+    # The color domain MUST be symmetric around 0, because 0 is where RdBu
+    # turns from red to blue and 0 is also where the race changes hands.
+    #
+    # Using the raw data range breaks that: plotly IGNORES zmid whenever both
+    # zmin and zmax are given explicitly, so a range like (-41.3, +23.3) puts
+    # the white midpoint at -9.0. Every R-held state between -9 and 0 then
+    # renders BLUE — which is exactly how FL (-5.7), MS (-4.2) and SC (-5.6)
+    # came out looking like Democratic holds.
+    #
+    # Anchoring to ±max(|margin|) keeps the neutral point on 0, so the color a
+    # state gets always agrees with the sign of its margin.
+    zlim = float(max(abs(df["Margin"].min()), abs(df["Margin"].max()))) if len(df) else 1.0
+    zlim = max(zlim, 1.0)          # guard: an all-ties df would collapse the scale
+    zmin, zmax = -zlim, zlim
 
     if not lean_only.empty:
         fig.add_trace(go.Choropleth(
             locations=lean_only["State"],
             locationmode="USA-states",
             z=lean_only["Margin"],
-            colorscale="RdBu", zmid=0, zmin=zmin, zmax=zmax,
+            colorscale="RdBu", zmin=zmin, zmax=zmax,   # symmetric around 0; see note above
             marker_opacity=0.45,
             marker_line_color="white",
             showscale=False,
@@ -289,7 +342,7 @@ def plot_margin_map(df):
         locations=polled["State"],
         locationmode="USA-states",
         z=polled["Margin"],
-        colorscale="RdBu", zmid=0, zmin=zmin, zmax=zmax,
+        colorscale="RdBu", zmin=zmin, zmax=zmax,   # symmetric around 0; see note above
         marker_line_color="white",
         colorbar_title="D margin",
         text=polled["State"],
@@ -475,24 +528,27 @@ if control["flips"]:
 # --- Senate Monte Carlo ---
 st.divider()
 st.subheader("Senate outlook — 1,000,000 simulated elections")
-_sen_sim = load_senate_sim()
+_sen_sim, _sen_err = load_sim_or_error(load_senate_sim, "Senate")
 
-s1, s2, s3 = st.columns(3)
-s1.metric("P(D majority, ≥51)", f"{_sen_sim['p_d_majority']:.1%}")
-s2.metric("P(R control, ≥50 + VP)", f"{_sen_sim['p_r_control']:.1%}")
-s3.metric("Mean D seats", f"{_sen_sim['mean_d_seats']:.1f}")
+if _sen_err:
+    render_sim_error("Senate", _sen_err)
+else:
+    s1, s2, s3 = st.columns(3)
+    s1.metric("P(D majority, ≥51)", f"{_sen_sim['p_d_majority']:.1%}")
+    s2.metric("P(R control, ≥50 + VP)", f"{_sen_sim['p_r_control']:.1%}")
+    s3.metric("Mean D seats", f"{_sen_sim['mean_d_seats']:.1f}")
 
-# Osborn's seat is tracked separately — the sim makes no caucus assumption, so
-# these only render when a Nebraska-style independent is actually in the field.
-if _sen_sim.get("p_osborn_wins", 0) > 0:
-    st.caption(
-        f"Nebraska independent — P(wins): {_sen_sim['p_osborn_wins']:.1%} · "
-        f"P(his seat is the pivot): {_sen_sim['p_osborn_pivotal']:.1%}. "
-        f"The simulation does not assume who he would caucus with."
-    )
+    # Osborn's seat is tracked separately — the sim makes no caucus assumption,
+    # so these only render when a Nebraska-style independent is in the field.
+    if _sen_sim.get("p_osborn_wins", 0) > 0:
+        st.caption(
+            f"Nebraska independent — P(wins): {_sen_sim['p_osborn_wins']:.1%} · "
+            f"P(his seat is the pivot): {_sen_sim['p_osborn_pivotal']:.1%}. "
+            f"The simulation does not assume who he would caucus with."
+        )
 
-st.plotly_chart(plot_seat_distribution(_sen_sim["seat_distribution"], 51, "Senate"),
-                width="stretch")
+    st.plotly_chart(plot_seat_distribution(_sen_sim["seat_distribution"], 51, "Senate"),
+                    width="stretch")
 
 # --- House map ---
 st.divider()
@@ -536,58 +592,62 @@ if len(house_flips):
 # --- House Monte Carlo ---
 st.divider()
 st.subheader("House outlook — 1,000,000 simulated elections")
-_hse_sim = load_house_sim()
+_hse_sim, _hse_err = load_sim_or_error(load_house_sim, "House")
 
-h1, h2, h3, h4 = st.columns(4)
-h1.metric(f"P(D majority, ≥{HOUSE_MAJORITY})", f"{_hse_sim['p_d_majority']:.1%}")
-h2.metric(f"P(R majority, ≥{HOUSE_MAJORITY})", f"{_hse_sim['p_r_majority']:.1%}")
-h3.metric("Mean D seats", f"{_hse_sim['mean_d_seats']:.1f}")
-h4.metric("90% range (D seats)",
-          f"{_hse_sim['d_seats_p05']:.0f}–{_hse_sim['d_seats_p95']:.0f}")
+if _hse_err:
+    render_sim_error("House", _hse_err)
+else:
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric(f"P(D majority, ≥{HOUSE_MAJORITY})", f"{_hse_sim['p_d_majority']:.1%}")
+    h2.metric(f"P(R majority, ≥{HOUSE_MAJORITY})", f"{_hse_sim['p_r_majority']:.1%}")
+    h3.metric("Mean D seats", f"{_hse_sim['mean_d_seats']:.1f}")
+    h4.metric("90% range (D seats)",
+              f"{_hse_sim['d_seats_p05']:.0f}–{_hse_sim['d_seats_p95']:.0f}")
 
-# 435 is odd, so exactly one party clears 218 — P(R) is the exact complement of
-# P(D), not a separately estimated quantity. No tie, no tiebreaker.
-st.caption("435 seats is odd — one party always clears 218, so P(R) is the exact "
-           "complement of P(D). There is no tie case and no tiebreaker.")
+    # 435 is odd, so exactly one party clears 218 — P(R) is the exact complement
+    # of P(D), not a separately estimated quantity. No tie, no tiebreaker.
+    st.caption("435 seats is odd — one party always clears 218, so P(R) is the exact "
+               "complement of P(D). There is no tie case and no tiebreaker.")
 
-st.warning(
-    f"**These probabilities rest on unvalidated error estimates.** The Senate σ "
-    f"values trace to published pollster-accuracy work; the House σ values in "
-    f"`calibration.py` are reasoned by analogy and have not been backtested. "
-    f"{_hse_sim['n_lean_only']} of {_hse_sim['n_lean_only'] + _hse_sim['n_polled']} "
-    f"districts ride on the lean-only σ, itself applied to 2022-vintage lean "
-    f"(95 districts on boundaries that no longer exist). Sensitivity is not "
-    f"academic: a +1pp uniform shift toward D moves P(D majority) from ~38% to "
-    f"~50%. Treat these figures as order-of-magnitude."
-)
+    st.warning(
+        f"**These probabilities rest on unvalidated error estimates.** The Senate σ "
+        f"values trace to published pollster-accuracy work; the House σ values in "
+        f"`calibration.py` are reasoned by analogy and have not been backtested. "
+        f"{_hse_sim['n_lean_only']} of {_hse_sim['n_lean_only'] + _hse_sim['n_polled']} "
+        f"districts ride on the lean-only σ, itself applied to 2022-vintage lean "
+        f"(95 districts on boundaries that no longer exist). Sensitivity is not "
+        f"academic: a +1pp uniform shift toward D moves P(D majority) from ~38% to "
+        f"~50%. Treat these figures as order-of-magnitude."
+    )
 
-st.plotly_chart(
-    plot_seat_distribution(_hse_sim["seat_distribution"], HOUSE_MAJORITY, "House"),
-    width="stretch")
+    st.plotly_chart(
+        plot_seat_distribution(_hse_sim["seat_distribution"], HOUSE_MAJORITY, "House"),
+        width="stretch")
 
-# The map can show a rating but not a probability, so the competitive districts
-# only become readable as a table. Mirrors the CLI's COMPETITIVE DISTRICTS block.
-_competitive = pd.DataFrame([
-    {
-        "Race":     r["race"],
-        "P(D win)": round(r["dem_win_prob"], 4),
-        "Margin":   round(r["margin"], 1),
-        "Basis":    "polls" if r["has_polls"] else "lean only",
-        "Democrat": r["dem_name"],
-        "Republican": r["rep_name"],
-    }
-    for r in _hse_sim["races"] if 0.05 < r["dem_win_prob"] < 0.95
-]).sort_values("P(D win)", ascending=False)
+    # The map can show a rating but not a probability, so the competitive
+    # districts only become readable as a table. Mirrors the CLI's COMPETITIVE
+    # DISTRICTS block.
+    _competitive = pd.DataFrame([
+        {
+            "Race":     r["race"],
+            "P(D win)": round(r["dem_win_prob"], 4),
+            "Margin":   round(r["margin"], 1),
+            "Basis":    "polls" if r["has_polls"] else "lean only",
+            "Democrat": r["dem_name"],
+            "Republican": r["rep_name"],
+        }
+        for r in _hse_sim["races"] if 0.05 < r["dem_win_prob"] < 0.95
+    ]).sort_values("P(D win)", ascending=False)
 
-st.caption(f"**{len(_competitive)} competitive districts** — P(D win) between 5% and 95%. "
-           f"The remaining {len(_hse_sim['races']) - len(_competitive)} sit outside that "
-           f"band and are not listed.")
-st.dataframe(
-    _competitive,
-    width="stretch", hide_index=True,
-    column_config={"P(D win)": st.column_config.ProgressColumn(
-        "P(D win)", min_value=0.0, max_value=1.0, format="%.1f%%")},
-)
+    st.caption(f"**{len(_competitive)} competitive districts** — P(D win) between 5% and 95%. "
+               f"The remaining {len(_hse_sim['races']) - len(_competitive)} sit outside that "
+               f"band and are not listed.")
+    st.dataframe(
+        _competitive,
+        width="stretch", hide_index=True,
+        column_config={"P(D win)": st.column_config.ProgressColumn(
+            "P(D win)", min_value=0.0, max_value=1.0, format="%.1f%%")},
+    )
 
 # --- Summary metrics (Senate) ---
 st.divider()
@@ -622,20 +682,26 @@ def color_margin(val):
 _table = df[["State", "Leader", "Leader %", "Challenger", "Challenger %",
              "Margin", "Basis", "Flip"]].copy()
 
-# Sign conventions already agree: Margin is positive when the non-Republican
-# leads, and the sim reports the same side's win probability (the D candidate,
-# or the independent where no D is running). A state the sim skipped maps to
-# NaN and renders blank rather than as a spurious 0%.
-_sen_win = {r["state"]: r["dem_side_win_prob"] for r in _sen_sim["races"]}
-_table.insert(6, "P(D-side win)", _table["State"].map(_sen_win))
+_fmt = {"Margin": lambda v: f"{v:+.1f}"}
+
+# The probability column is additive: when the Senate simulation is unavailable
+# the table still renders in full, just without it. Point estimates do not
+# depend on the sim, so there is no reason to withhold them.
+if _sen_sim is not None:
+    # Sign conventions already agree: Margin is positive when the non-Republican
+    # leads, and the sim reports the same side's win probability (the D
+    # candidate, or the independent where no D is running). A state the sim
+    # skipped maps to NaN and renders blank rather than as a spurious 0%.
+    _sen_win = {r["state"]: r["dem_side_win_prob"] for r in _sen_sim["races"]}
+    _table.insert(6, "P(D-side win)", _table["State"].map(_sen_win))
+    _fmt["P(D-side win)"] = lambda v: "" if pd.isna(v) else f"{v:.1%}"
+    st.caption("P(D-side win) is the Monte Carlo win probability for the "
+               "non-Republican candidate — the same side the Margin column is signed for.")
 
 styled = (_table
           .style
           .map(color_margin, subset=["Margin"])
-          .format({"Margin": lambda v: f"{v:+.1f}",
-                   "P(D-side win)": lambda v: "" if pd.isna(v) else f"{v:.1%}"}))
-st.caption("P(D-side win) is the Monte Carlo win probability for the "
-           "non-Republican candidate — the same side the Margin column is signed for.")
+          .format(_fmt))
 st.dataframe(styled, width="stretch", hide_index=True)
 
 # --- Per-state drilldown ---

@@ -21,11 +21,12 @@ separately — the sim does NOT assume who he caucuses with.
 
 import numpy as np
 
-from senate_model import predict_all_races, project_senate_control
+from senate_model import predict_all_races, project_senate_control, INDIE_CAUCUS
 from calibration import (
     SIGMA_NATIONAL_MARGIN,
     SIGMA_LOCAL_MARGIN,
     N_SIMS,
+    N_SENATE_SEATS,
 )
 
 # Set to an int (e.g. 42) for reproducible runs; None = fresh randomness.
@@ -92,20 +93,51 @@ def baseline_seats(predictions, races):
     det_d = det_r = 0
     for row in predictions:
         if row["state"] in modeled_states and row.get("winner"):
-            if row["party"] == "D":
+            # Subtract using the SAME caucus convention project_senate_control
+            # used when it added the seat, or the subtraction won't cancel.
+            #
+            # This is why: control credits an independent's seat to whichever
+            # party INDIE_CAUCUS says he caucuses with, so Osborn's NE seat is
+            # inside control["D"]. Skipping 'I' winners here (as this loop used
+            # to) left that seat in base_d while NE was ALSO being simulated —
+            # the seat got counted twice, base_d came out one too high, and
+            # every simulation started Democrats a seat ahead. That surfaced as
+            # the "= 101, expected 100" warning below.
+            #
+            # Counting the seat here does NOT re-introduce a caucus assumption
+            # into the simulation: simulate() still excludes Osborn's column
+            # from d_seats and reports his seat separately. This line only
+            # reverses control's bookkeeping so the baseline nets to zero.
+            effective_party = INDIE_CAUCUS.get(row["party"], row["party"])
+            if effective_party == "D":
                 det_d += 1
-            elif row["party"] == "R":
+            elif effective_party == "R":
                 det_r += 1
-            # an 'I' deterministic winner belongs to neither baseline
 
     base_d = control["D"] - det_d
     base_r = control["R"] - det_r
 
+    # Seat identity — every seat is either fixed in the baseline or simulated,
+    # exactly once. This RAISES rather than warns: a violated identity means the
+    # seat totals are wrong, and wrong seat totals produce a confident-looking
+    # P(control) that is simply false. There is no partial-credit reading of a
+    # forecast built on 101 seats, so refusing to return one is the only honest
+    # option. (Was a print(); promoted 2026-07-29 after it flagged a real
+    # double-count for an unknown length of time without anyone noticing.)
     total = base_d + base_r + len(races)
-    if total != 100:
-        print(f"⚠ Seat math check: baseline D={base_d} + R={base_r} + "
-              f"{len(races)} simulated races = {total}, expected 100. "
-              f"(not_called={control['not_called']}) — verify before trusting output.")
+    if total != N_SENATE_SEATS:
+        raise ValueError(
+            f"Senate seat identity violated: baseline D={base_d} + R={base_r} + "
+            f"{len(races)} simulated races = {total}, expected {N_SENATE_SEATS} "
+            f"(not_called={control['not_called']}).\n"
+            f"Every seat must be counted exactly once — either fixed in the "
+            f"baseline or simulated, never both and never neither.\n"
+            f"Usual causes: a modeled race whose winner project_senate_control "
+            f"credited under a different party convention than this function "
+            f"subtracts it under (see the INDIE_CAUCUS note above); a race in "
+            f"`races` that produced no deterministic winner; or SAFE_D/SAFE_R "
+            f"in project_senate_control drifting out of date."
+        )
     return base_d, base_r
 
 
