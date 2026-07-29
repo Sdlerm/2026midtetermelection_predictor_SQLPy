@@ -273,27 +273,34 @@ def plot_vote_shares():
     print(f"Saved to {out_path}")
 
 
-def _house_rows():
+def _house_rows(polled_only=True):
     """
-    Group Tier 1 House predictions into one row per district for plotting.
+    Group Tier 2 House predictions into one row per district for plotting.
 
-    Pairs each polled district's Democratic-side candidate (D, or I when no D
-    is running) with its Republican candidate, mirroring the pairing logic the
-    Senate charts use. Districts without both sides polled are skipped —
+    Pairs each district's Democratic-side candidate (D, or I when no D is
+    running) with its Republican candidate, mirroring the pairing logic the
+    Senate charts use. Districts without both sides present are skipped —
     house_model already dropped one-sided races, but a D/I-less or R-less
     multi-way race could still slip through.
+
+    polled_only=True (the default) restricts output to poll-backed districts.
+    The per-district charts need that: 435 paired bars is an unreadable figure,
+    and lean-only rows carry stderr=None, which the error-bar math cannot
+    consume. Only the chamber-wide seat chart passes False.
 
     Returns
     -------
     list of tuple
         (race, d_key, d_info, r_info, margin) sorted by D margin, descending.
         d_info / r_info are dicts with projected, name, is_incumbent, is_flip,
-        winner, and stderr keys; margin is D projected minus R projected.
+        winner, has_polls, and stderr keys; margin is D projected minus R.
     """
     predictions, _, _ = predict_house_races()
 
     seen = {}
     for r in predictions:
+        if polled_only and not r.get("has_polls"):
+            continue
         race = r["race"]
         if race not in seen:
             seen[race] = {}
@@ -303,6 +310,7 @@ def _house_rows():
             "is_incumbent": r["is_incumbent"],
             "is_flip":      r.get("is_flip", False),
             "winner":       r.get("winner", False),
+            "has_polls":    r.get("has_polls", False),
             "stderr":       r.get("poll_stderr"),
         }
 
@@ -324,7 +332,7 @@ def _house_rows():
 def plot_house_vote_shares():
     """
     Plots projected vote shares for Democratic and Republican candidates in
-    the polled 2026 House districts (Tier 1).
+    the poll-backed 2026 House districts (Tier 2).
 
     Same layout as the Senate vote-shares chart: paired bars per district with
     error bars for polling uncertainty, a 50% reference line, percentage
@@ -379,7 +387,7 @@ def plot_house_vote_shares():
     ax.set_ylabel("Projected vote share (%)")
     top_with_err = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_errs + r_errs))
     ax.set_ylim(0, top_with_err + 6)
-    ax.set_title(f"2026 House Projected Vote Shares — Tier 1, {len(rows)} polled districts  (* = incumbent)",
+    ax.set_title(f"2026 House Projected Vote Shares — Tier 2, {len(rows)} poll-backed districts  (* = incumbent)",
                  fontweight="bold")
     ax.legend()
 
@@ -392,7 +400,7 @@ def plot_house_vote_shares():
 def plot_house_race_margins():
     """
     Generate a horizontal bar plot of projected vote margins for the polled
-    2026 House districts (Tier 1).
+    2026 House districts (Tier 2), poll-backed only.
 
     Same layout as the Senate margins chart: one bar per district (D margin,
     positive = Dem leads), colored by leading party, with error bars combining
@@ -444,7 +452,7 @@ def plot_house_race_margins():
     ax.invert_yaxis()                # biggest D margin at the top
     ax.set_xlabel("D margin (positive = Dem leads)")
 
-    ax.set_title(f"2026 House Race Margins — Tier 1, {len(races)} polled districts",
+    ax.set_title(f"2026 House Race Margins — Tier 2, {len(races)} poll-backed districts",
                  fontweight="bold", fontsize=10)
 
     d_patch = mpatches.Patch(color="#3a7abf", label="Dem leads")
@@ -459,52 +467,68 @@ def plot_house_race_margins():
 
 def plot_house_party_control():
     """
-    Plots a horizontal bar chart of projected party leads in the polled 2026
-    House districts (Tier 1), against the 435-seat chamber and the 218-seat
-    majority line.
+    Plots a horizontal bar chart of projected party leads across all 435 2026
+    House districts (Tier 2), against the 218-seat majority line.
 
-    This is deliberately NOT a chamber-control projection — house_model.py
-    covers only the polled districts (Tier 1), and ~39 districts cannot say
-    who holds the House. The unmodeled remainder is shown in gray so the gap
-    between "districts we can project" and "districts that decide control" is
-    visible rather than hidden. A real control projection arrives with Tier 2
-    (CPVI district lean + generic ballot + climate).
+    Tier 2 closed the coverage gap Tier 1 had — every district now has a
+    projection — but seat COUNTS are still not a control PROBABILITY. Each bar
+    is split by basis: the solid segment is poll-backed, the hatched segment is
+    lean-only. That split is the honest replacement for Tier 1's gray
+    "unmodeled" band: the uncertainty didn't disappear when coverage arrived,
+    it moved from "we have no estimate" to "our estimate rests on 2022-vintage
+    structural lean". A control probability needs a Monte Carlo over correlated
+    district errors, which this chart deliberately does not fake.
 
     The chart is saved as `house_control.png` in the `data/charts` directory.
-    If no polled districts are available (house_ingest.py not run), prints a
-    notice and returns without plotting.
+    If no districts are available (house_ingest.py not run), prints a notice
+    and returns without plotting.
     """
-    rows = _house_rows()
+    rows = _house_rows(polled_only=False)
     if not rows:
-        print("No polled House races found — run house_ingest.py first.")
+        print("No House races found — run house_ingest.py first.")
         return
 
-    d_leads = sum(1 for _, _, d_info, r_info, margin in rows if margin > 0)
-    r_leads = len(rows) - d_leads
+    d_polled = sum(1 for _, _, d_info, _, margin in rows
+                   if margin > 0 and d_info["has_polls"])
+    d_lean   = sum(1 for _, _, d_info, _, margin in rows
+                   if margin > 0 and not d_info["has_polls"])
+    r_polled = sum(1 for _, _, _, r_info, margin in rows
+                   if margin <= 0 and r_info["has_polls"])
+    r_lean   = sum(1 for _, _, _, r_info, margin in rows
+                   if margin <= 0 and not r_info["has_polls"])
+    d_leads, r_leads = d_polled + d_lean, r_polled + r_lean
     flips = sum(
         1 for _, _, d_info, r_info, _ in rows
         if d_info["is_flip"] or r_info["is_flip"]
     )
-    unmodeled = TOTAL_HOUSE_SEATS - d_leads - r_leads
 
     fig, ax = plt.subplots(figsize=(9, 3))
 
-    ax.barh(0, d_leads, color="#3a7abf", height=0.5, label=f"Dem leads ({d_leads})")
-    ax.barh(0, r_leads, color="#c0392b", height=0.5,
-            left=d_leads, label=f"Rep leads ({r_leads})")
-    ax.barh(0, unmodeled, color="#cccccc", height=0.5,
-            left=d_leads + r_leads, label=f"Unmodeled ({unmodeled})")
+    # Order matters: polled segments sit on the outside edges so the two
+    # hatched lean-only blocks meet in the middle, straddling the majority line
+    # where the seats least supported by polling actually decide control.
+    left = 0
+    for width, color, hatch, label in [
+        (d_polled, "#3a7abf", None, f"Dem — polls ({d_polled})"),
+        (d_lean,   "#3a7abf", "//", f"Dem — lean only ({d_lean})"),
+        (r_lean,   "#c0392b", "//", f"Rep — lean only ({r_lean})"),
+        (r_polled, "#c0392b", None, f"Rep — polls ({r_polled})"),
+    ]:
+        if width:
+            ax.barh(0, width, color=color, height=0.5, left=left,
+                    hatch=hatch, edgecolor="white", linewidth=0, label=label)
+        left += width
 
     ax.axvline(HOUSE_MAJORITY, color="black", linewidth=1.2, linestyle="--",
                label=f"{HOUSE_MAJORITY}-seat majority")
     ax.set_xlim(0, TOTAL_HOUSE_SEATS)
     ax.set_yticks([])
-    ax.set_xlabel(f"House seats  (D + R + unmodeled = {TOTAL_HOUSE_SEATS})")
+    ax.set_xlabel(f"House seats  (D + R = {TOTAL_HOUSE_SEATS})")
 
-    title = (f"House Tier 1: leads in {len(rows)} polled districts — "
-             f"NOT a chamber projection\n"
+    title = (f"House Tier 2: projected leads in all {len(rows)} districts — "
+             f"seat counts, NOT a control probability\n"
              f"D: {d_leads}  R: {r_leads}  flips: {flips}  ·  "
-             f"{unmodeled} districts unmodeled (Tier 2 pending)")
+             f"{d_lean + r_lean} seats rest on lean only (hatched)")
     ax.set_title(title, fontweight="bold", fontsize=10)
     ax.legend(loc="lower right", fontsize=8, ncols=2)
 

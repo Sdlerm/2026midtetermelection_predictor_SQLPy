@@ -1,6 +1,6 @@
 # 2026 Midterm Election Predictor
 
-A polling-based forecaster for the 2026 US midterms: full Senate modeling plus Tier 1 House projections for polled districts. The model blends a credibility- and recency-weighted poll average with a state structural-lean baseline, a six-indicator FRED economic climate score, and a presidential approval adjustment into projected vote shares per candidate. A Monte Carlo simulation then turns the Senate point estimates into win probabilities and a projected seat distribution.
+A polling-based forecaster for the 2026 US midterms: full Senate modeling plus Tier 2 House projections covering all 435 districts. The model blends a credibility- and recency-weighted poll average with a state structural-lean baseline, a six-indicator FRED economic climate score, and a presidential approval adjustment into projected vote shares per candidate. A Monte Carlo simulation then turns the Senate point estimates into win probabilities and a projected seat distribution.
 
 ---
 
@@ -14,6 +14,8 @@ project/
 │   ├── senate_nominees.csv         # Ground truth: confirmed Senate general election candidates
 │   ├── house_nominees.csv          # Ground truth: confirmed House nominees per district (wide format)
 │   ├── state_lean.csv              # State structural lean data
+│   ├── district_lean.csv           # District structural lean (GENERATED — run fetch_district_lean.py)
+│   ├── district_lean_overrides.csv # Hand-maintained district lean corrections (always wins)
 │   ├── president.csv               # Presidential approval polling data (Trump approval)
 │   ├── pollster_ratings.csv        # Pollster letter grades (from 538's archived 2023 ratings)
 │   ├── fetch_nyt_polls.sh          # Helper script: downloads fresh NYT poll CSVs as nyt_*.csv
@@ -32,12 +34,13 @@ project/
 ├── fetch_economics.py              # Pulls FRED indicators + computes weighted approval rating
 ├── load_historical.py              # Loads 2018/2020/2022/2024 Senate results (historical_results table)
 ├── senate_model.py                 # Point estimates: poll average + lean + econ + approval
-├── house_model.py                  # House Tier 1 projections (polled districts only, no chamber call)
+├── house_model.py                  # House Tier 2 projections (all 435 districts, seat counts, no control probability)
 ├── calibration.py                  # Monte Carlo error constants + race rating thresholds, with provenance
-├── monte_carlo.py                  # Simulates elections → win probabilities and seat distribution
+├── monte_carlo_senate.py           # Simulates Senate elections → win probabilities and seat distribution
+├── monte_carlo_house.py            # Simulates House elections → district win probabilities and P(control)
 ├── make_district_geojson.py        # One-time: Census cd119 shapefile → data/cd119.geojson
 ├── charts.py                       # Matplotlib visualizations (margins, seat count, vote shares)
-├── dashboard.py                    # Streamlit dashboard: Senate margin map + House ratings map
+├── dashboard.py                    # Streamlit dashboard: maps, Monte Carlo probabilities, seat distributions
 └── README.md                       # This file
 ```
 
@@ -171,21 +174,67 @@ python senate_model.py
 
 Prints each state's projected vote shares, the economic climate and approval scores, toss-up flags, and the projected Senate control outcome.
 
-### Step 5b — House Tier 1 projections (optional)
+### Step 5a — District lean data (required once, before House projections)
+
+```bash
+python fetch_district_lean.py
+```
+
+Downloads FiveThirtyEight's district partisan-lean file, merges
+`data/district_lean_overrides.csv` on top of it, and writes
+`data/district_lean.csv` (435 districts). **The output is generated — edit the
+overrides file, not the output.** Re-running re-downloads the base and rebuilds
+the output; your overrides survive.
+
+The base file is **2022 vintage on 2022 maps**. Every run prints the districts in
+redrawn states (TX/NC/OH/FL — 95 of them) whose lean describes boundaries that no
+longer exist. Add rows to the overrides file as you source replacements:
+
+```csv
+district,dem_margin,note
+TX-35,12.4,2024 pres margin on post-2025 lines
+```
+
+### Step 5b — House Tier 2 projections (optional)
 
 ```bash
 python house_model.py
 ```
 
-Projects the polled House districts only — currently polls-only (`LEAN_ALPHA_HOUSE = 1.0`), with the same economic climate and approval adjustments as the Senate model, plus incumbency-based flip detection. It deliberately makes **no chamber-control projection**: ~39 polled districts out of 435 can't say who holds the House. That arrives with Tier 2 (CPVI district lean + generic ballot + climate).
+Projects **all 435 districts**. Polled districts blend polls with district lean
+(`LEAN_ALPHA_HOUSE = 0.80`, matching the Senate); unpolled districts fall back to
+lean plus the same climate and approval adjustments — the identical formula with
+the poll term unavailable, mirroring the Senate's lean-only fallback. Rows carry
+`has_polls` so display can separate the two.
 
-### Step 6 — Monte Carlo simulation
+It reports **seat counts, not a control probability** — probabilities come from
+`monte_carlo_house.py` (Step 6b). Two gaps are deliberate and documented in the
+file's bias ledger: there is no generic-ballot term (538's feed is dead), and flip
+detection only works for the ~83 districts in `house_nominees.csv` — elsewhere the
+incumbent is unknown, so no flip means *unknown*, not *hold*.
+
+### Step 6 — Monte Carlo simulation (Senate)
 
 ```bash
-python monte_carlo.py
+python monte_carlo_senate.py
 ```
 
 Runs 1,000,000 simulated elections on top of the model's adjusted margins and prints per-race win probabilities, the mean Democratic seat count, P(D majority), P(R control), and Nebraska-specific probabilities (see below).
+
+### Step 6b — Monte Carlo simulation (House)
+
+```bash
+python monte_carlo_house.py
+```
+
+Same 1,000,000 simulations, same `margin + national_error + local_error` structure, over all 435 districts. Prints per-district win probabilities for competitive seats, the D/R seat distribution with a 90% range, and P(D majority ≥ 218). Runs in ~5 seconds at ~700 MB.
+
+Two things differ from the Senate version, both forced by the data:
+
+- **Per-district local σ.** Only ~36 districts are polled; the other ~399 rest on `district_lean.csv`. Their error isn't polling error, it's "how wrong is 2022-vintage lean about 2026" — roughly double. So σ_local is a vector selected by `has_polls`, not a scalar.
+- **Chunked simulation.** A full 1,000,000 × 435 float64 error matrix is 3.5 GB, and the calculation needs two at once. This version streams in chunks of `SIM_CHUNK_HOUSE` and accumulates. Identical arithmetic, bounded memory — a sanity check asserts two different chunk sizes agree.
+
+⚠️ **The House σ values in `calibration.py` are reasoned, not backtested.** The Senate's trace to published pollster-accuracy work; the House's are argued by analogy from them. Since 399 of 435 districts depend on the lean-only σ, treat P(control) as order-of-magnitude until those numbers are measured against real House results.
 
 ### Step 7 — Visualizations
 
@@ -202,8 +251,14 @@ streamlit run dashboard.py
 Opens an interactive web dashboard at `http://localhost:8501` with:
 
 - **Senate margin map** — continuous D/R gradient; lean-only races (no polls) render at reduced opacity with an explicit hover label, so polled and unpolled projections are visually distinct
-- **House Tier 1 map** — polled districts colored by discrete rating bins (Safe/Likely/Lean/Toss Up) driven by the margin thresholds in `calibration.py`; requires `data/cd119.geojson` (see Setup §6). TX/NC/OH/FL boundaries shown are pre-2025 redraw.
-- Senate control banner, projected flips, sortable race table, and a per-state drilldown
+- **House Tier 2 map** — all 435 districts colored by discrete rating bins (Safe/Likely/Lean/Toss Up) driven by the margin thresholds in `calibration.py`; lean-only districts render at reduced opacity so coverage never reads as confidence. Requires `data/cd119.geojson` (see Setup §6) and `data/district_lean.csv` (Step 5a). For TX/NC/OH/FL both the boundaries *and* the lean are pre-2025 redraw.
+- **Senate outlook** — P(D majority ≥51), P(R control ≥50 + VP), mean D seats, the Nebraska independent's win/pivot probabilities, and a seat-distribution histogram colored by which side of the majority line each bar falls on (the blue share of the mass *is* P(D majority))
+- **House outlook** — P(D majority ≥218), P(R majority), mean D seats, a 90% seat range, the same seat-distribution histogram, and a sortable table of the ~150 competitive districts (P(D win) between 5% and 95%), which is where the House simulation becomes readable — a choropleth can show a rating but not a probability
+- Senate control banner, projected flips, sortable race table with per-race Monte Carlo win probabilities, and a per-state drilldown
+
+Both outlook sections run the full 1,000,000 simulations rather than a reduced count, so dashboard figures always match the CLI exactly. They sit behind `@st.cache_data(ttl=300)`; a cold load costs ~4.8s and ~1.0 GB for both chambers' models and simulations together.
+
+⚠️ The House probability block carries a standing warning that its σ values are unvalidated. Do not remove it without backtesting the constants first — see Step 6b.
 
 ---
 
@@ -280,7 +335,7 @@ Races where the finalists land within `TOSSUP_THRESHOLD_PP` (1.1 points) of each
 
 ## Monte Carlo Simulation
 
-`monte_carlo.py` turns the point estimates into probabilities. Each of the 1,000,000 simulated elections perturbs every race's margin with two error draws:
+`monte_carlo_senate.py` and `monte_carlo_house.py` turn the point estimates into probabilities. Each of the 1,000,000 simulated elections perturbs every race's margin with two error draws:
 
 ```
 simulated_margin = adjusted_margin + national_error + local_error
@@ -309,10 +364,13 @@ Sign convention throughout: `margin = D − R`, positive = Democrat leads. Nebra
 | `SIGMA_TOTAL_MARGIN`    | `calibration.py`      | Total polling error (5.2 pts); local error is derived from total and national.                                 |
 | `N_SIMS`                | `calibration.py`      | Number of Monte Carlo simulations (1,000,000).                                                                 |
 | Rating thresholds       | `calibration.py`      | Margin bins for race ratings: Toss Up < 5, Lean < 10, Likely < 15, Safe beyond. Used by the House map.         |
-| `LEAN_ALPHA_HOUSE`      | `house_model.py`      | Poll/lean blend for House races. Pinned at 1.0 (polls-only) until district lean data exists.                   |
-| `RANDOM_SEED`           | `monte_carlo.py`      | Set to an int for reproducible simulation runs; `None` = fresh randomness.                                     |
+| `LEAN_ALPHA_HOUSE`      | `house_model.py`      | Poll/lean blend for House races. 0.80 — 80% poll, 20% district lean, matching `LEAN_ALPHA`.                    |
+| `RANDOM_SEED`           | `monte_carlo_senate.py`, `monte_carlo_house.py` | Set to an int for reproducible simulation runs; `None` = fresh randomness.                   |
+| House error σ values    | `calibration.py`      | `SIGMA_*_HOUSE_*` — reasoned, not backtested. The lean-only σ drives 399 of 435 districts.                     |
+| `SIM_CHUNK_HOUSE`       | `calibration.py`      | Simulations per chunk. Memory knob; changing it changes the random stream, so it is visible in output.          |
 | Pollster grades         | `data/pollster_ratings.csv` | Letter grade + credibility per pollster; applied by `load_pollster_ratings.py`.                          |
 | State lean values       | `data/state_lean.csv` | Baseline partisan expectations for each state.                                                                 |
+| District lean values    | `data/district_lean_overrides.csv` | Per-district corrections layered over the 538 base. Edit this, never `district_lean.csv`.         |
 
 ---
 
@@ -323,7 +381,7 @@ Any function that keys a state's finalists by party string (e.g. building a `{"D
 Two layers treat independents differently, on purpose:
 
 - **Point-estimate seat count** (`senate_model.py`): `INDIE_CAUCUS = {"I": "D"}` assigns Osborn's seat to the Democratic caucus for the control projection.
-- **Monte Carlo** (`monte_carlo.py`): makes no caucus assumption — Osborn's seat is tracked separately, with explicit probabilities for him winning and for his seat being pivotal.
+- **Monte Carlo** (`monte_carlo_senate.py`): makes no caucus assumption — Osborn's seat is tracked separately, with explicit probabilities for him winning and for his seat being pivotal.
 
 ---
 
@@ -348,6 +406,7 @@ The Monte Carlo layer supplements this single-outcome projection with a full sea
 - **Economic indicators:** Federal Reserve Bank of St. Louis — FRED API
 - **Nominees:** Manually maintained `data/senate_nominees.csv` and `data/house_nominees.csv`
 - **State lean:** Manually maintained `data/state_lean.csv`
+- **District lean:** FiveThirtyEight partisan-lean districts file (github.com/fivethirtyeight/data), 2022 vintage on 2022 maps, plus hand overrides — see `fetch_district_lean.py`
 - **Historical results:** MEDSL precinct-level 2024 data and summary-format 2018/2020/2022 results (`data/*-senate-state.csv`), loaded via `load_historical.py`
 
 ---
@@ -380,7 +439,10 @@ The SQLite database (`db/elections.db`) contains the following tables:
 
 ## Planned Enhancements
 
-- House Tier 2: CPVI-style district lean on post-redistricting maps + generic ballot + climate, extending projections to unpolled districts and enabling a chamber-control call (the `house_ingest.py` run prints unpolled rostered districts as the seed list)
+- District lean on post-redistricting maps: replace the 95 stale TX/NC/OH/FL rows via `data/district_lean_overrides.csv` (every `fetch_district_lean.py` run lists them)
+- Generic-ballot term for the House — needs a live feed; 538's `polls-page` CSVs now return HTML
+- Backtested House error σ values to replace the reasoned ones in `calibration.py` — the single biggest source of doubt in `monte_carlo_house.py`
+- Incumbent party for all 435 districts, so flip detection stops being limited to the ~83 rostered ones
 - Updated TX/NC/OH/FL boundary data reflecting the 2025 mid-decade redraws
 - Backtesting the model against the loaded 2018/2020/2022/2024 historical results
 - Automated data refresh via `fetch_nyt_polls.sh` on a cron schedule

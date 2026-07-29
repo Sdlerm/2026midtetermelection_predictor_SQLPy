@@ -17,7 +17,7 @@ SIGN CONVENTION (used everywhere downstream):
 
 SCALE: all sigmas below are on the MARGIN scale (percentage points of
 D-minus-R), not the vote-share scale. senate_model.py outputs per-
-candidate shares; monte_carlo.py converts to margins BEFORE adding
+candidate shares; monte_carlo_senate.py converts to margins BEFORE adding
 error draws. If you ever perturb shares directly instead, halve these.
 """
 
@@ -64,6 +64,65 @@ SIGMA_NATIONAL_MARGIN = 2.5
 # keeps all three internally consistent.
 # Current value: sqrt(5.2^2 - 2.5^2) ≈ 4.56
 SIGMA_LOCAL_MARGIN = math.sqrt(SIGMA_TOTAL_MARGIN**2 - SIGMA_NATIONAL_MARGIN**2)
+
+# =====================================================================
+# HOUSE constants (monte_carlo_house.py)
+# =====================================================================
+# READ THIS BEFORE TRUSTING ANY HOUSE OUTPUT.
+#
+# The Senate sigmas above are MEASURED — they trace to published pollster-
+# accuracy work. The House sigmas below are REASONED, not measured: they are
+# argued from the Senate numbers by analogy, and no House backtest has been run
+# against them. They are honest starting values, not calibrated ones. Replace
+# them with backtested numbers once load_historical.py covers House results.
+# (Recorded 2026-07-28.)
+#
+# The structural difference from the Senate: only ~36 of 435 districts are
+# polled at all. The other ~399 are projected from district_lean.csv, so their
+# error is not POLLING error — it is the error of using 2022-vintage partisan
+# lean to predict a 2026 race. That is a much larger and differently-shaped
+# quantity, which is why the House needs two total-error constants where the
+# Senate needs one.
+
+# National (correlated) error — one draw per simulated election, applied to
+# every district. Set slightly above the Senate's 2.5 because a House map is
+# more exposed to a uniform national swing than a set of 35 state races with
+# heavy incumbent-specific variation: the same generic-ballot miss moves all
+# 435 districts together.
+SIGMA_NATIONAL_MARGIN_HOUSE = 3.0
+
+# Total error for POLLED districts. Above the Senate's 5.2 because district
+# polls are sparser, less frequent, more often partisan-sponsored, and rated
+# lower than statewide Senate polls — the same reasons house_ingest.py has to
+# work harder to dedupe them.
+SIGMA_TOTAL_MARGIN_HOUSE_POLLED = 6.0
+
+# Total error for LEAN-ONLY districts. This is the big one and the least
+# defensible: it stands in for "how wrong is a 2022-vintage partisan lean about
+# a 2026 result", absorbing candidate quality, incumbency, retirements, and —
+# for the 95 districts in TX/NC/OH/FL — boundaries that no longer exist. Set to
+# roughly double the polled figure. If this number is wrong, every P(control)
+# this model prints is wrong, because 399 of 435 districts depend on it.
+SIGMA_TOTAL_MARGIN_HOUSE_LEAN = 11.0
+
+# Local (independent) components — DERIVED, do not set by hand. Same identity
+# as the Senate: sigma_total^2 = sigma_national^2 + sigma_local^2.
+# Current values: sqrt(6^2 - 3^2) ≈ 5.20, sqrt(11^2 - 3^2) ≈ 10.58
+SIGMA_LOCAL_MARGIN_HOUSE_POLLED = math.sqrt(
+    SIGMA_TOTAL_MARGIN_HOUSE_POLLED**2 - SIGMA_NATIONAL_MARGIN_HOUSE**2)
+SIGMA_LOCAL_MARGIN_HOUSE_LEAN = math.sqrt(
+    SIGMA_TOTAL_MARGIN_HOUSE_LEAN**2 - SIGMA_NATIONAL_MARGIN_HOUSE**2)
+
+# Housekeeping
+N_HOUSE_SEATS = 435
+HOUSE_MAJORITY = 218          # 435 is odd, so there is no tie and no tiebreaker
+
+# Simulations per chunk in monte_carlo_house.py. The Senate allocates one
+# (n_sims, n_races) array outright; at 1M x 435 that would be 3.5 GB per array
+# and the sim needs two live at once, so the House streams in chunks instead.
+# 25,000 x 435 float64 ≈ 87 MB per array — comfortable, and large enough that
+# per-chunk overhead stays negligible.
+SIM_CHUNK_HOUSE = 25_000
 
 # ---------------------------------------------------------------------
 # Simulation count

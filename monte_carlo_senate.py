@@ -1,5 +1,5 @@
 """
-monte_carlo.py — turn senate_model.py's point estimates into probabilities.
+monte_carlo_senate.py — turn senate_model.py's point estimates into probabilities.
 
 Core idea: the adjusted margins are our best guess, but polls miss. We
 simulate N_SIMS alternate election nights, each time perturbing every

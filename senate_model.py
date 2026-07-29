@@ -8,14 +8,14 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LEAN_ALPHA = 0.80    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
+LEAN_ALPHA = 0.85    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
-ECON_WEIGHT = 0.18    # how much economics nudges the poll average; tune this
+ECON_WEIGHT = 0.20    # how much economics nudges the poll average; tune this
 APPROVAL_WEIGHT = 0.05
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
-TOSSUP_THRESHOLD_PP = 1.1 #if the finalists shares are w/i 1pp, flag as "toss-up"
+TOSSUP_THRESHOLD_PP = 1.2 #if the finalists shares are w/i 1.2pp, flag as "toss-up"
 
 
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
@@ -751,30 +751,47 @@ if __name__ == "__main__":
     print(f"Approval score: {approval:+.2f} ({approval_direction})")
     print(f"Approval adjustment: ±{abs(approval * APPROVAL_WEIGHT * 10):.2f}pp\n")
 
-    current_state = None
-    # Stable sort by state so each state's nominee rows stay grouped (and keep
-    # their within-state order) while states print in alphabetical order.
-    for r in sorted(predictions, key=lambda p: p["state"]):
-        if r["state"] != current_state:
-            current_state = r["state"]
-            print(f"\n── {current_state} ──────────────")
-        # After
-        marker  = "★" if r.get("winner") else " "
-        inc     = " [incumbent]" if r["is_incumbent"] else ""
-        flip    = " ⚡FLIP" if r.get("winner") and r["is_flip"] else ""
-        tossup  = " 🪙TOSSUP" if r.get("winner") and r["is_tossup"] else ""
-        econ_adj = f"{r['adjustment']:+.2f}pp"
-        appr_adj = f"{r['approval_adjustment']:+.2f}pp"
-        # if r.get("has_polls", True):
-        #     detail = f"poll: {r['poll_avg']}%  blend: {r['blended']}%"
-        # else:
-        #     detail = f"lean-only: {r['lean']}%"
-        # print(f"  {marker} {r['party']}  {r['name']:<32}  {detail}  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
-        if r.get("has_polls", True):
-            detail = f"poll: {r['poll_avg']}%  blend: {r['blended']}%"
-        else:
-            detail = f"lean-only: {r['lean']}%"
-        print(f"  {marker} {r['party']}  {r['name']:<32}  {detail}  econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
+    def print_section(rows, heading):
+        """
+        Print one basis section: races grouped by state, states alphabetical.
+
+        Splitting the output by basis rather than interleaving means the reader
+        never has to check each row's detail field to learn whether they're
+        looking at a poll-backed projection or a structural guess — the section
+        they're in already answers that.
+        """
+        print(f"\n{'═'*60}\n{heading}\n{'═'*60}")
+        if not rows:
+            print("  (none)")
+            return
+
+        current_state = None
+        # Stable sort by state so each state's nominee rows stay grouped (and
+        # keep their within-state order) while states print alphabetically.
+        for r in sorted(rows, key=lambda p: p["state"]):
+            if r["state"] != current_state:
+                current_state = r["state"]
+                print(f"\n── {current_state} ──────────────")
+            marker  = "★" if r.get("winner") else " "
+            inc     = " [incumbent]" if r["is_incumbent"] else ""
+            flip    = " ⚡FLIP" if r.get("winner") and r["is_flip"] else ""
+            tossup  = " 🪙TOSSUP" if r.get("winner") and r["is_tossup"] else ""
+            econ_adj = f"{r['adjustment']:+.2f}pp"
+            appr_adj = f"{r['approval_adjustment']:+.2f}pp"
+            if r.get("has_polls", True):
+                detail = f"poll: {r['poll_avg']}%  blend: {r['blended']}%"
+            else:
+                detail = f"lean-only: {r['lean']}%"
+            print(f"  {marker} {r['party']}  {r['name']:<32}  {detail}  "
+                  f"econ: {econ_adj}  appr: {appr_adj}  → {r['projected']}%{inc}{flip}{tossup}")
+
+    polled    = [r for r in predictions if r.get("has_polls", True)]
+    lean_only = [r for r in predictions if not r.get("has_polls", True)]
+
+    print_section(polled,
+                  f"POLLED RACES — {len({r['state'] for r in polled})} states")
+    print_section(lean_only,
+                  f"LEAN-ONLY RACES (no polling) — {len({r['state'] for r in lean_only})} states")
 
     # Senate control projection
     control = project_senate_control(predictions)

@@ -1,4 +1,4 @@
-# dashboard.py — 2026 election predictor (Senate + House Tier 1)
+# dashboard.py — 2026 election predictor (Senate + House Tier 2)
 #
 # Regenerated 2026-07-20. Changes from previous version:
 #   * ALL imports consolidated at top (kills the `from turtle import st`
@@ -20,10 +20,13 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import monte_carlo_house as mc_house
+import monte_carlo_senate as mc_senate
 from calibration import (
     TOSSUP_MARGIN_THRESHOLD,
     LEAN_MARGIN_THRESHOLD,
     LIKELY_MARGIN_THRESHOLD,
+    HOUSE_MAJORITY,
 )
 from house_model import predict_house_races
 from senate_model import ECON_WEIGHT, STATES_WITH_2026_RACES, predict_all_races, project_senate_control
@@ -88,6 +91,51 @@ def _geoid(state, district):
 # Data loading (cached)
 # ---------------------------------------------------------------------------
 
+# Raw model output, cached once and shared by the display loaders AND the
+# simulation loaders below. Without this split the models would run twice per
+# refresh — once to build the tables, once to seed the Monte Carlo.
+# Treat the returned lists as read-only: they are the cached objects themselves,
+# and build_races() only reads them, which is what makes this safe.
+
+@st.cache_data(ttl=300)
+def load_senate_predictions():
+    return predict_all_races()
+
+
+@st.cache_data(ttl=300)
+def load_house_predictions():
+    return predict_house_races()
+
+
+@st.cache_data(ttl=300)
+def load_senate_sim():
+    """1,000,000 simulated Senate elections -> probabilities + seat distribution.
+
+    N_SIMS is deliberately left at its CLI value so the dashboard and
+    monte_carlo_senate.py cannot disagree. RANDOM_SEED is None, so each cache
+    refresh reshuffles; at 1M sims the MC standard error is ~0.05pp, well below
+    displayed precision.
+    """
+    predictions, _climate, _nominees = load_senate_predictions()
+    races = mc_senate.build_races(predictions)
+    base_d, base_r = mc_senate.baseline_seats(predictions, races)
+    return mc_senate.simulate(races, base_d, base_r)
+
+
+@st.cache_data(ttl=300)
+def load_house_sim():
+    """1,000,000 simulated House elections -> probabilities + seat distribution.
+
+    baseline_seats() takes only `races` here, unlike the Senate's
+    (predictions, races): every House seat is up every cycle, so there is no
+    "not up" remainder for a baseline to carry. See monte_carlo_house.
+    """
+    predictions, _climate, _approval = load_house_predictions()
+    races = mc_house.build_races(predictions)
+    base_d, base_r = mc_house.baseline_seats(races)
+    return mc_house.simulate(races, base_d, base_r)
+
+
 @st.cache_data(ttl=300)
 def load_predictions():
     """Senate predictions -> display DataFrame + climate + control projection.
@@ -96,7 +144,7 @@ def load_predictions():
     and Margin StdErr=None — they get NO error bar rather than a zero-width
     one that would claim false certainty.
     """
-    predictions, climate, nominees_count = predict_all_races()
+    predictions, climate, nominees_count = load_senate_predictions()
     control = project_senate_control(predictions)
 
     seen = {}
@@ -146,8 +194,12 @@ def load_predictions():
 
 @st.cache_data(ttl=300)
 def load_house_df():
-    """House Tier 1 predictions -> display DataFrame with GEOID + rating."""
-    results, _, _ = predict_house_races()
+    """House Tier 2 predictions -> display DataFrame with GEOID + rating.
+
+    Covers all 435 districts. The Basis column separates poll-backed rows from
+    lean-only ones; plot_house_map renders the latter at reduced opacity so
+    coverage never reads as confidence."""
+    results, _, _ = load_house_predictions()
     by_race = {}
     for r in results:
         by_race.setdefault(r["race"], []).append(r)
@@ -169,9 +221,10 @@ def load_house_df():
             "Challenger %": chal["projected"],
             "Margin":       round(margin, 1),
             "Rating":       rate(margin),
+            "Basis":        "polls" if lead.get("has_polls") else "lean only",
             "Flip":         "⚡" if lead.get("is_flip") else "",
         })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows).sort_values("Margin", ascending=False)
 
 
 CD_GEOJSON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "cd119.geojson")
@@ -254,9 +307,15 @@ def plot_margin_map(df):
 
 
 def plot_house_map(hdf):
-    """House Tier 1 choropleth with discrete rating bins. z is the rating's
-    index in RATING_ORDER; the colorscale has hard stops (each color repeated
-    at both ends of its band) so bins never blend into each other."""
+    """House Tier 2 choropleth with discrete rating bins, all 435 districts.
+
+    z is the rating's index in RATING_ORDER; the colorscale has hard stops
+    (each color repeated at both ends of its band) so bins never blend.
+
+    Two traces, same colorscale and same zmin/zmax: lean-only districts render
+    at reduced opacity, matching plot_margin_map's treatment of unpolled Senate
+    states. Sharing the scale matters — a separate scale per trace would map
+    the same rating to different colors depending on which trace it landed in."""
     gj = load_cd_geojson()
 
     n = len(RATING_ORDER)
@@ -265,28 +324,77 @@ def plot_house_map(hdf):
         discrete_scale.append([i / n, RATING_COLORS[r_name]])
         discrete_scale.append([(i + 1) / n, RATING_COLORS[r_name]])
 
-    z = hdf["Rating"].map(RATING_ORDER.index)
+    hover_cols = ["Race", "Rating", "Leader", "Leader %", "Challenger", "Challenger %"]
 
-    fig = go.Figure(go.Choropleth(
-        geojson=gj,
-        featureidkey="properties.GEOID",
-        locations=hdf["GEOID"],
-        z=z,
-        zmin=0, zmax=n,          # n (not n-1): z=k must fall inside band k
-        colorscale=discrete_scale,
-        showscale=False,          # dot legend below replaces the colorbar
-        marker_line_color="white",
-        marker_line_width=0.3,
-        customdata=hdf[["Race", "Rating", "Leader", "Leader %", "Challenger", "Challenger %"]],
-        hovertemplate=(
-            "<b>%{customdata[0]}</b> — %{customdata[1]}"
-            "<br>%{customdata[2]}: %{customdata[3]}%"
-            "<br>%{customdata[4]}: %{customdata[5]}%"
-            "<extra></extra>"
-        ),
-    ))
+    def _trace(sub, opacity, basis_note):
+        return go.Choropleth(
+            geojson=gj,
+            featureidkey="properties.GEOID",
+            locations=sub["GEOID"],
+            z=sub["Rating"].map(RATING_ORDER.index),
+            zmin=0, zmax=n,       # n (not n-1): z=k must fall inside band k
+            colorscale=discrete_scale,
+            showscale=False,      # dot legend below replaces the colorbar
+            marker_opacity=opacity,
+            marker_line_color="white",
+            marker_line_width=0.3,
+            customdata=sub[hover_cols],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b> — %{customdata[1]}" + basis_note +
+                "<br>%{customdata[2]}: %{customdata[3]}%"
+                "<br>%{customdata[4]}: %{customdata[5]}%"
+                "<extra></extra>"
+            ),
+        )
+
+    fig = go.Figure()
+    lean_only = hdf[hdf["Basis"] == "lean only"]
+    polled    = hdf[hdf["Basis"] == "polls"]
+
+    if not lean_only.empty:
+        fig.add_trace(_trace(lean_only, 0.45, " · LEAN-ONLY, no polls"))
+    if not polled.empty:
+        fig.add_trace(_trace(polled, 1.0, ""))
+
     fig.update_geos(scope="usa", visible=False)
     fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+    return fig
+
+
+def plot_seat_distribution(dist, majority, chamber_label):
+    """
+    Histogram of simulated Democratic seat counts.
+
+    One helper serves both chambers because both simulate() functions return
+    `seat_distribution` in the same shape: {d_seats: n_simulations}.
+
+    Bars at or above the majority line are blue, below are red, so the visual
+    split IS the probability — the blue share of the mass is P(D majority). That
+    is the point of showing a distribution instead of a point estimate: it makes
+    a 212-seat mean with a 187–239 range read as genuinely uncertain rather than
+    as a narrow miss.
+    """
+    seats  = sorted(dist)
+    counts = [dist[s] for s in seats]
+    total  = sum(counts) or 1
+    colors = [PARTY_COLOR["D"] if s >= majority else PARTY_COLOR["R"] for s in seats]
+
+    fig = go.Figure(go.Bar(
+        x=seats,
+        y=[c / total for c in counts],
+        marker_color=colors,
+        hovertemplate="D seats: %{x}<br>%{y:.2%} of simulations<extra></extra>",
+    ))
+    fig.add_vline(x=majority - 0.5, line_color="black", line_width=1.2, line_dash="dash",
+                  annotation_text=f"{majority} = majority", annotation_position="top")
+    fig.update_layout(
+        xaxis_title=f"Democratic seats ({chamber_label})",
+        yaxis_title="Share of simulations",
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=260,
+        showlegend=False,
+        bargap=0.05,
+    )
     return fig
 
 
@@ -364,12 +472,41 @@ if control["flips"]:
     flip_names = "  ·  ".join([f"⚡ {f['state']} → {f['party']}" for f in control["flips"]])
     st.caption(f"Projected flips: {flip_names}")
 
+# --- Senate Monte Carlo ---
+st.divider()
+st.subheader("Senate outlook — 1,000,000 simulated elections")
+_sen_sim = load_senate_sim()
+
+s1, s2, s3 = st.columns(3)
+s1.metric("P(D majority, ≥51)", f"{_sen_sim['p_d_majority']:.1%}")
+s2.metric("P(R control, ≥50 + VP)", f"{_sen_sim['p_r_control']:.1%}")
+s3.metric("Mean D seats", f"{_sen_sim['mean_d_seats']:.1f}")
+
+# Osborn's seat is tracked separately — the sim makes no caucus assumption, so
+# these only render when a Nebraska-style independent is actually in the field.
+if _sen_sim.get("p_osborn_wins", 0) > 0:
+    st.caption(
+        f"Nebraska independent — P(wins): {_sen_sim['p_osborn_wins']:.1%} · "
+        f"P(his seat is the pivot): {_sen_sim['p_osborn_pivotal']:.1%}. "
+        f"The simulation does not assume who he would caucus with."
+    )
+
+st.plotly_chart(plot_seat_distribution(_sen_sim["seat_distribution"], 51, "Senate"),
+                width="stretch")
+
 # --- House map ---
 st.divider()
-st.subheader("2026 House map — Tier 1 (polled districts only)")
+st.subheader("2026 House map — Tier 2 (all districts)")
 hdf = load_house_df()
-st.caption(f"{len(hdf)} of 435 districts modeled · uncolored districts are unmodeled, "
-           f"not safe · ⚠️ TX/NC/OH/FL boundaries shown are pre-2025 redraw")
+_h_polled = int((hdf["Basis"] == "polls").sum())
+_h_d = int((hdf["Margin"] > 0).sum())
+_h_r = len(hdf) - _h_d
+st.caption(
+    f"{len(hdf)} of 435 districts modeled · {_h_polled} poll-backed, "
+    f"{len(hdf) - _h_polled} lean-only (shown at reduced opacity) · "
+    f"D leads {_h_d} · R leads {_h_r} — point estimates; control probability below · "
+    f"⚠️ TX/NC/OH/FL lean and boundaries are both pre-2025 redraw"
+)
 if os.path.exists(CD_GEOJSON_PATH):
     st.caption("   ".join(f"● {r_name}" for r_name in RATING_ORDER))
     st.plotly_chart(plot_house_map(hdf), width="stretch")
@@ -381,14 +518,76 @@ else:
         "and save as `data/cd119.geojson`. Table below still works."
     )
     st.dataframe(
-        hdf[["Race", "Leader", "Leader %", "Challenger", "Challenger %", "Margin", "Rating", "Flip"]],
+        hdf[["Race", "Leader", "Leader %", "Challenger", "Challenger %",
+             "Margin", "Rating", "Basis", "Flip"]],
         width="stretch", hide_index=True,
     )
 
+# Flips are only detectable where house_nominees.csv names an incumbent (~83
+# districts). Elsewhere the incumbent is unknown, so absence of ⚡ means
+# "unknown", not "hold" — hence the caption rather than a bare flip list.
 house_flips = hdf[hdf["Flip"] == "⚡"]
 if len(house_flips):
+    st.caption("Flip detection covers rostered districts only — elsewhere the "
+               "incumbent is unknown, not held.")
     st.caption("Projected flips: " +
                " · ".join(house_flips["Race"] + " → " + house_flips["Leader"].str[0]))
+
+# --- House Monte Carlo ---
+st.divider()
+st.subheader("House outlook — 1,000,000 simulated elections")
+_hse_sim = load_house_sim()
+
+h1, h2, h3, h4 = st.columns(4)
+h1.metric(f"P(D majority, ≥{HOUSE_MAJORITY})", f"{_hse_sim['p_d_majority']:.1%}")
+h2.metric(f"P(R majority, ≥{HOUSE_MAJORITY})", f"{_hse_sim['p_r_majority']:.1%}")
+h3.metric("Mean D seats", f"{_hse_sim['mean_d_seats']:.1f}")
+h4.metric("90% range (D seats)",
+          f"{_hse_sim['d_seats_p05']:.0f}–{_hse_sim['d_seats_p95']:.0f}")
+
+# 435 is odd, so exactly one party clears 218 — P(R) is the exact complement of
+# P(D), not a separately estimated quantity. No tie, no tiebreaker.
+st.caption("435 seats is odd — one party always clears 218, so P(R) is the exact "
+           "complement of P(D). There is no tie case and no tiebreaker.")
+
+st.warning(
+    f"**These probabilities rest on unvalidated error estimates.** The Senate σ "
+    f"values trace to published pollster-accuracy work; the House σ values in "
+    f"`calibration.py` are reasoned by analogy and have not been backtested. "
+    f"{_hse_sim['n_lean_only']} of {_hse_sim['n_lean_only'] + _hse_sim['n_polled']} "
+    f"districts ride on the lean-only σ, itself applied to 2022-vintage lean "
+    f"(95 districts on boundaries that no longer exist). Sensitivity is not "
+    f"academic: a +1pp uniform shift toward D moves P(D majority) from ~38% to "
+    f"~50%. Treat these figures as order-of-magnitude."
+)
+
+st.plotly_chart(
+    plot_seat_distribution(_hse_sim["seat_distribution"], HOUSE_MAJORITY, "House"),
+    width="stretch")
+
+# The map can show a rating but not a probability, so the competitive districts
+# only become readable as a table. Mirrors the CLI's COMPETITIVE DISTRICTS block.
+_competitive = pd.DataFrame([
+    {
+        "Race":     r["race"],
+        "P(D win)": round(r["dem_win_prob"], 4),
+        "Margin":   round(r["margin"], 1),
+        "Basis":    "polls" if r["has_polls"] else "lean only",
+        "Democrat": r["dem_name"],
+        "Republican": r["rep_name"],
+    }
+    for r in _hse_sim["races"] if 0.05 < r["dem_win_prob"] < 0.95
+]).sort_values("P(D win)", ascending=False)
+
+st.caption(f"**{len(_competitive)} competitive districts** — P(D win) between 5% and 95%. "
+           f"The remaining {len(_hse_sim['races']) - len(_competitive)} sit outside that "
+           f"band and are not listed.")
+st.dataframe(
+    _competitive,
+    width="stretch", hide_index=True,
+    column_config={"P(D win)": st.column_config.ProgressColumn(
+        "P(D win)", min_value=0.0, max_value=1.0, format="%.1f%%")},
+)
 
 # --- Summary metrics (Senate) ---
 st.divider()
@@ -418,10 +617,25 @@ def color_margin(val):
     color = "58,122,191" if val > 0 else "192,57,43"
     return f"background-color: rgba({color},{intensity/255:.2f})"
 
-styled = (df[["State", "Leader", "Leader %", "Challenger", "Challenger %", "Margin", "Basis", "Flip"]]
+# .copy() before adding the simulation column: df is the cached object itself,
+# and mutating it would poison the cache for every later reader.
+_table = df[["State", "Leader", "Leader %", "Challenger", "Challenger %",
+             "Margin", "Basis", "Flip"]].copy()
+
+# Sign conventions already agree: Margin is positive when the non-Republican
+# leads, and the sim reports the same side's win probability (the D candidate,
+# or the independent where no D is running). A state the sim skipped maps to
+# NaN and renders blank rather than as a spurious 0%.
+_sen_win = {r["state"]: r["dem_side_win_prob"] for r in _sen_sim["races"]}
+_table.insert(6, "P(D-side win)", _table["State"].map(_sen_win))
+
+styled = (_table
           .style
           .map(color_margin, subset=["Margin"])
-          .format({"Margin": lambda v: f"{v:+.1f}"}))
+          .format({"Margin": lambda v: f"{v:+.1f}",
+                   "P(D-side win)": lambda v: "" if pd.isna(v) else f"{v:.1%}"}))
+st.caption("P(D-side win) is the Monte Carlo win probability for the "
+           "non-Republican candidate — the same side the Margin column is signed for.")
 st.dataframe(styled, width="stretch", hide_index=True)
 
 # --- Per-state drilldown ---
