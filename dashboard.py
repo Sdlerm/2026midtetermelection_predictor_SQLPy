@@ -510,7 +510,7 @@ st.plotly_chart(plot_margin_map(df), width="stretch")
 # --- Senate control banner ---
 st.divider()
 _seat_line = (f"D: {control['D']} · R: {control['R']} · "
-              f"{control['seats_remaining']} unassigned · 100 total seats")
+              f"{control['not_called']} unassigned · 100 total seats")
 if control["control"] == "Democrats":
     st.success(f"🔵 Projected Senate control: **Democrats**  —  {_seat_line}")
 elif control["control"] == "Republicans":

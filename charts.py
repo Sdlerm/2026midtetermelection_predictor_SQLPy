@@ -148,7 +148,7 @@ def plot_seat_count():
 
     d_seats = control["D"]
     r_seats = control["R"]
-    uncalled = control["seats_remaining"]  # all Class 2 seats not yet assigned; keeps bar total = 100
+    uncalled = control["not_called"]  # all Class 2 seats not yet assigned; keeps bar total = 100
     total = d_seats + r_seats + uncalled
 
     ax.barh(0, d_seats, color="#3a7abf", height=0.5, label=f"Democrat ({d_seats})")
@@ -177,19 +177,124 @@ def plot_seat_count():
     print(f"Saved to {out_path}")
 
 
+def _plot_vote_shares(rows, title, out_name):
+    """
+    Render a paired vote-share chart for `rows` and save it to `out_name`.
+
+    Shared by the Senate and House vote-share charts, which differ only in
+    their data source and title. Rows must already be sorted by D margin
+    (descending); each is the (key, d_key, d_info, r_info, margin) tuple the
+    two callers build, where `key` is a state abbreviation or a district code.
+
+    Layout is horizontal — one race per row, bars running left to right. The
+    vertical version this replaces packed 34 states into a 14-inch-wide figure,
+    which collided the three-line x tick labels, the per-bar percentages, and
+    the FLIP! markers into an unreadable band. Going horizontal gives each race
+    its own row: the candidate line fits on one line beside the bars, the two
+    percentages land at different heights so they cannot overlap, and flips get
+    a dedicated right-hand column instead of floating above the bars. Figure
+    height scales with the row count, so density stays fixed as races are added.
+
+    Returns
+    -------
+    None
+        Saves the figure to `CHARTS_DIR/out_name` and prints the path.
+    """
+    d_pcts = [row[2]["projected"] for row in rows]
+    r_pcts = [row[3]["projected"] for row in rows]
+    d_errs = [row[2]["stderr"] or 0 for row in rows]
+    r_errs = [row[3]["stderr"] or 0 for row in rows]
+    y = range(len(rows))
+    # Bars are 0.36 tall on centres 0.40 apart, leaving a ~2px surface gap
+    # between the pair at the 0.42 in/row this figure is sized to.
+    height = 0.36
+    offset = 0.20
+
+    fig_h = len(rows) * 0.42 + 1.6
+    fig, ax = plt.subplots(figsize=(11, fig_h))
+
+    d_bars = ax.barh([i - offset for i in y], d_pcts, height, xerr=d_errs, capsize=1.5,
+                     color="#3a7abf", label="Democrat", ecolor="#8a8a8a",
+                     error_kw={"elinewidth": 0.9})
+    r_bars = ax.barh([i + offset for i in y], r_pcts, height, xerr=r_errs, capsize=1.5,
+                     color="#c0392b", label="Republican", ecolor="#8a8a8a",
+                     error_kw={"elinewidth": 0.9})
+    ax.axvline(50, color="#555555", linestyle="--", linewidth=0.9, label="50% threshold")
+
+    # Values sit in muted ink, not the series colour — the bar beside each
+    # number already carries party identity. Placed past the error bar rather
+    # than with bar_label's bar-relative padding, which puts short-bar labels
+    # underneath their own error whisker.
+    for i, (pct, err) in enumerate(zip(d_pcts, d_errs)):
+        ax.text(pct + err + 1.4, i - offset, f"{pct:.1f}", va="center", ha="left",
+                fontsize=7, color="#444444")
+    for i, (pct, err) in enumerate(zip(r_pcts, r_errs)):
+        ax.text(pct + err + 1.4, i + offset, f"{pct:.1f}", va="center", ha="left",
+                fontsize=7, color="#444444")
+
+    max_extent = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_errs + r_errs))
+    flip_x = max_extent + 5.5
+    for i, (_, d_key, d_info, r_info, margin) in enumerate(rows):
+        if not (d_info.get("is_flip", False) or r_info.get("is_flip", False)):
+            continue
+        # Flips name the gaining party in text, so the marker never depends on
+        # colour alone to be read.
+        ax.text(flip_x, i, f"FLIP → {d_key if margin > 0 else 'R'}",
+                va="center", ha="left", fontsize=7, fontweight="bold",
+                color="#3a7abf" if margin > 0 else "#c0392b")
+
+    y_labels = []
+    for key, d_key, d_info, r_info, _ in rows:
+        d_lbl  = d_key + "*" if d_info["is_incumbent"] else d_key
+        r_lbl  = "R*" if r_info["is_incumbent"] else "R"
+        d_last = d_info["name"].rsplit(" ", 1)[-1]
+        r_last = r_info["name"].rsplit(" ", 1)[-1]
+        y_labels.append(f"{key}   {d_lbl} {d_last} / {r_lbl} {r_last}")
+
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(y_labels, fontsize=8)
+    ax.invert_yaxis()          # strongest D margin on top
+    ax.set_ylim(len(rows) - 0.5, -0.5)
+    ax.set_xlabel("Projected vote share (%)")
+    ax.set_xlim(0, flip_x + 7)
+    # Ticks stop at the last decade the data reaches, so no gridline is drawn
+    # through the flip column out past the longest bar.
+    ax.set_xticks(range(0, int(max_extent // 10) * 10 + 1, 10))
+
+    ax.xaxis.grid(True, color="#e4e4e4", linewidth=0.7)
+    ax.set_axisbelow(True)
+    ax.tick_params(length=0)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color("#cccccc")
+
+    # Title and legend live in a fixed 0.8-inch band at the top, so their
+    # spacing holds whatever the row count does to the figure height. The
+    # legend is added after tight_layout and excluded from it: laid out
+    # normally, its figure-coordinate anchor makes tight_layout reserve the
+    # whole top of the figure and open a large gap above the first bar.
+    handles, labels = ax.get_legend_handles_labels()
+    fig.suptitle(title, fontweight="bold", fontsize=11, y=1 - 0.22 / fig_h)
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.8 / fig_h))
+    leg = fig.legend(handles, labels, loc="upper center",
+                     bbox_to_anchor=(0.5, 1 - 0.44 / fig_h),
+                     ncols=3, frameon=False, fontsize=9)
+    leg.set_in_layout(False)
+
+    out_path = os.path.join(CHARTS_DIR, out_name)
+    plt.savefig(out_path, dpi=150)
+    print(f"Saved to {out_path}")
+
+
 def plot_vote_shares():
     """
-    Plots projected vote shares for Democratic and Republican candidates in the 2026 Senate
-    races, displaying incumbency status, vote margins, and other contextual details.
+    Plots projected vote shares for Democratic and Republican candidates in the
+    2026 Senate races, displaying incumbency status, flips, and candidate names.
 
-    The function generates a bar chart comparing Democratic and Republican vote shares
-    across different states with labeling for vote margins, incumbency, and names of candidates.
-    Error bars on each bar show polling uncertainty (weighted standard deviation across
-    polls, or a sampling-error fallback when only one poll exists).
-
-    ### Raises
-    ValueError: If the data format for predictions is invalid or required fields are missing
-                in the input.
+    One horizontal row per race, sorted by D margin, with error bars showing
+    polling uncertainty (weighted standard deviation across polls, or a
+    sampling-error fallback when only one poll exists). See `_plot_vote_shares`
+    for the layout itself.
 
     ### Notes
     - This function relies on `predict_all_races` to provide predictions for all Senate races.
@@ -226,51 +331,9 @@ def plot_vote_shares():
 
     rows.sort(key=lambda row: row[4], reverse=True)
 
-    d_pcts = [row[2]["projected"] for row in rows]
-    r_pcts = [row[3]["projected"] for row in rows]
-    d_errs = [row[2]["stderr"] or 0 for row in rows]
-    r_errs = [row[3]["stderr"] or 0 for row in rows]
-    x = range(len(rows))
-    width = 0.35
-
-    fig, ax = plt.subplots(figsize=(14, 7))
-    d_bars = ax.bar([i - width / 2 for i in x], d_pcts, width, yerr=d_errs, capsize=3,
-                    color="#3a7abf", label="Democrat", ecolor="#666666")
-    r_bars = ax.bar([i + width / 2 for i in x], r_pcts, width, yerr=r_errs, capsize=3,
-                    color="#c0392b", label="Republican", ecolor="#666666")
-    ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, label="50% threshold")
-
-    ax.bar_label(d_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#1a4a7a")
-    ax.bar_label(r_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#8b0000")
-
-    for i, (_, d_key, d_info, r_info, margin) in enumerate(rows):
-        is_flip = d_info.get("is_flip", False) or r_info.get("is_flip", False)
-        if not is_flip:
-            continue
-        top = max(d_pcts[i], r_pcts[i])
-        ax.text(i, top + 2.5, "FLIP!", ha="center", va="bottom", fontsize=7,
-                fontweight="bold", color="#3a7abf" if margin > 0 else "#c0392b")
-
-    x_labels = []
-    for state, d_key, d_info, r_info, _ in rows:
-        d_lbl  = d_key + "*" if d_info["is_incumbent"] else d_key
-        r_lbl  = "R*" if r_info["is_incumbent"] else "R"
-        d_last = d_info["name"].rsplit(" ", 1)[-1]
-        r_last = r_info["name"].rsplit(" ", 1)[-1]
-        x_labels.append(f"{state}\n{d_lbl} {d_last}\n{r_lbl} {r_last}")
-
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(x_labels, fontsize=7)
-    ax.set_ylabel("Projected vote share (%)")
-    top_with_err = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_errs + r_errs))
-    ax.set_ylim(0, top_with_err + 5)
-    ax.set_title("2026 Senate Projected Vote Shares  (* = incumbent)", fontweight="bold")
-    ax.legend()
-
-    plt.tight_layout()
-    out_path = os.path.join(CHARTS_DIR, "vote_shares.png")
-    plt.savefig(out_path, dpi=150)
-    print(f"Saved to {out_path}")
+    _plot_vote_shares(rows,
+                      "2026 Senate Projected Vote Shares  (* = incumbent)",
+                      "vote_shares.png")
 
 
 def _house_rows(polled_only=True):
@@ -334,10 +397,10 @@ def plot_house_vote_shares():
     Plots projected vote shares for Democratic and Republican candidates in
     the poll-backed 2026 House districts (Tier 2).
 
-    Same layout as the Senate vote-shares chart: paired bars per district with
-    error bars for polling uncertainty, a 50% reference line, percentage
-    labels, incumbency asterisks, and FLIP! markers above districts where the
-    projected winner's party differs from the incumbent's. Figure width scales
+    Same layout as the Senate vote-shares chart: one horizontal row per
+    district with error bars for polling uncertainty, a 50% reference line,
+    percentage labels, incumbency asterisks, and a flip marker where the
+    projected winner's party differs from the incumbent's. Figure height scales
     with the number of polled districts.
 
     The chart is saved as `house_vote_shares.png` in the `data/charts`
@@ -349,52 +412,11 @@ def plot_house_vote_shares():
         print("No polled House races found — run house_ingest.py first.")
         return
 
-    d_pcts = [row[2]["projected"] for row in rows]
-    r_pcts = [row[3]["projected"] for row in rows]
-    d_errs = [row[2]["stderr"] or 0 for row in rows]
-    r_errs = [row[3]["stderr"] or 0 for row in rows]
-    x = range(len(rows))
-    width = 0.35
-
-    fig, ax = plt.subplots(figsize=(max(10, len(rows) * 0.72), 7))
-    d_bars = ax.bar([i - width / 2 for i in x], d_pcts, width, yerr=d_errs, capsize=3,
-                    color="#3a7abf", label="Democrat", ecolor="#666666")
-    r_bars = ax.bar([i + width / 2 for i in x], r_pcts, width, yerr=r_errs, capsize=3,
-                    color="#c0392b", label="Republican", ecolor="#666666")
-    ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, label="50% threshold")
-
-    ax.bar_label(d_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#1a4a7a")
-    ax.bar_label(r_bars, fmt="%.1f%%", fontsize=6, padding=2, color="#8b0000")
-
-    for i, (_, d_key, d_info, r_info, margin) in enumerate(rows):
-        is_flip = d_info.get("is_flip", False) or r_info.get("is_flip", False)
-        if not is_flip:
-            continue
-        top = max(d_pcts[i] + d_errs[i], r_pcts[i] + r_errs[i])
-        ax.text(i, top + 2.5, "FLIP!", ha="center", va="bottom", fontsize=7,
-                fontweight="bold", color="#3a7abf" if margin > 0 else "#c0392b")
-
-    x_labels = []
-    for race, d_key, d_info, r_info, _ in rows:
-        d_lbl  = d_key + "*" if d_info["is_incumbent"] else d_key
-        r_lbl  = "R*" if r_info["is_incumbent"] else "R"
-        d_last = d_info["name"].rsplit(" ", 1)[-1]
-        r_last = r_info["name"].rsplit(" ", 1)[-1]
-        x_labels.append(f"{race}\n{d_lbl} {d_last}\n{r_lbl} {r_last}")
-
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(x_labels, fontsize=6.5)
-    ax.set_ylabel("Projected vote share (%)")
-    top_with_err = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_errs + r_errs))
-    ax.set_ylim(0, top_with_err + 6)
-    ax.set_title(f"2026 House Projected Vote Shares — Tier 2, {len(rows)} poll-backed districts  (* = incumbent)",
-                 fontweight="bold")
-    ax.legend()
-
-    plt.tight_layout()
-    out_path = os.path.join(CHARTS_DIR, "house_vote_shares.png")
-    plt.savefig(out_path, dpi=150)
-    print(f"Saved to {out_path}")
+    _plot_vote_shares(
+        rows,
+        f"2026 House Projected Vote Shares — Tier 2, {len(rows)} poll-backed "
+        f"districts  (* = incumbent)",
+        "house_vote_shares.png")
 
 
 def plot_house_race_margins():

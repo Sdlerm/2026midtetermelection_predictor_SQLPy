@@ -8,10 +8,10 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LEAN_ALPHA = 0.80    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
+LEAN_ALPHA = 0.82    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
-ECON_WEIGHT = 0.20    # how much economics nudges the poll average; tune this
-APPROVAL_WEIGHT = 0.05
+ECON_WEIGHT = 0.26    # how much economics nudges the poll average; tune this
+APPROVAL_WEIGHT = 0.1
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
@@ -617,7 +617,7 @@ def project_senate_control(predictions):
     # Seats not up for election in 2026 — see derivation in docstring
     SAFE_R = 31
     SAFE_D = 34
-    SEATS_UP_2026 = 35  # Class 2 seats; used for seats_remaining (fills seat chart to 100)
+    # Class 2 seats; used for seats_remaining (fills seat chart to 100)
 
     projected_r = SAFE_R
     projected_d = SAFE_D
@@ -674,8 +674,6 @@ def project_senate_control(predictions):
         f"not_called={not_called} = {total}, expected 100. seen_states={len(seen_states)}"
     )
 
-    seats_remaining = 0
-
     if projected_r > 50:
         control = "Republicans"
         tiebreaker = False
@@ -693,7 +691,6 @@ def project_senate_control(predictions):
         "R": projected_r,
         "D": projected_d,
         "not_called": not_called,
-        "seats_remaining": seats_remaining,
         "control": control,
         "tiebreaker": tiebreaker,
         "flips": flips,
