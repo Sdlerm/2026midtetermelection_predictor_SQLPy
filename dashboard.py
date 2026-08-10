@@ -8,9 +8,13 @@
 #     expensive one)
 #   * House flips DataFrame renamed house_flips (was shadowing the Senate
 #     flip count)
-#   * House map now uses categorical rating bins (Safe/Likely/Lean/Toss Up)
+#   * House map now uses categorical rating bins (Safe/Likely/Lean/Tilt)
 #     driven by calibration.py thresholds, replacing the continuous gradient.
 #     (Requires LEAN=10.0 < LIKELY=15.0 in calibration.py — applied 2026-07-20.)
+#   * 2026-08-10: the neutral "Toss Up" bin is gone. Every district is sided
+#     with whichever candidate has the greater projected vote share; margins
+#     under TILT_MARGIN_THRESHOLD land in "Tilt D"/"Tilt R" instead of a
+#     single yellow bucket. The map now answers "who leads?" everywhere.
 
 import json
 import math
@@ -20,15 +24,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import house_sensitivity
 import monte_carlo_house as mc_house
 import monte_carlo_senate as mc_senate
 from calibration import (
-    TOSSUP_MARGIN_THRESHOLD,
+    TILT_MARGIN_THRESHOLD,
     LEAN_MARGIN_THRESHOLD,
     LIKELY_MARGIN_THRESHOLD,
     HOUSE_MAJORITY,
 )
-from house_model import predict_house_races
+from house_model import national_environment_margin, predict_house_races
 from senate_model import ECON_WEIGHT, STATES_WITH_2026_RACES, predict_all_races, project_senate_control
 
 # ---------------------------------------------------------------------------
@@ -54,13 +59,17 @@ STATE_FIPS = {
 AT_LARGE = {"AK", "DE", "ND", "SD", "VT", "WY"}   # census GEOIDs use '00'; our DB stores '01'
 REDRAWN  = {"TX", "NC", "OH", "FL"}               # 2025 mid-decade maps; boundary file shows OLD lines
 
-# Rating bins — colors approximate the standard ratings-map palette.
+# Rating bins — a diverging D-to-R ramp with NO neutral color in the middle.
+# Every band names a side, so the map's color always answers "who is ahead
+# here?" The two "Tilt" bands are the closest races: pale, but unmistakably
+# blue or red rather than a shared yellow.
 RATING_COLORS = {
     "Safe D":   "#0d2b52",
     "Likely D": "#2563cf",
-    "Lean D":   "#9ec8f5",
-    "Toss Up":  "#f5efad",
-    "Lean R":   "#f0a3bb",
+    "Lean D":   "#7fb1ec",
+    "Tilt D":   "#c9dff5",
+    "Tilt R":   "#f9ccd5",
+    "Lean R":   "#ef98ac",
     "Likely R": "#d63b2f",
     "Safe R":   "#7a1210",
 }
@@ -68,12 +77,20 @@ RATING_ORDER = list(RATING_COLORS)  # index = z value for the discrete colorscal
 
 
 def rate(margin):
-    """Signed margin (+ = non-R leads) -> rating bucket per calibration.py.
-    Assumes thresholds ordered TOSSUP < LEAN < LIKELY (competitive -> settled)."""
+    """Signed margin (+ = D leads) -> rating bucket per calibration.py.
+
+    Every margin gets a side: the bucket is named for whichever candidate has
+    the greater projected vote share, however thin the gap. Sub-TILT margins
+    are "Tilt D"/"Tilt R", not a neutral toss-up — a 0.3pt D lead is a (very
+    soft) D projection, and the band is what conveys the softness.
+
+    Assumes thresholds ordered TILT < LEAN < LIKELY (competitive -> settled).
+    An exact 0.0 margin sides R, matching the D/R lead counts in the caption
+    below, which split on `Margin > 0`."""
     a = abs(margin)
-    if a < TOSSUP_MARGIN_THRESHOLD:
-        return "Toss Up"
     side = "D" if margin > 0 else "R"
+    if a < TILT_MARGIN_THRESHOLD:
+        return f"Tilt {side}"
     if a < LEAN_MARGIN_THRESHOLD:
         return f"Lean {side}"
     if a < LIKELY_MARGIN_THRESHOLD:
@@ -134,6 +151,33 @@ def load_house_sim():
     races = mc_house.build_races(predictions)
     base_d, base_r = mc_house.baseline_seats(races)
     return mc_house.simulate(races, base_d, base_r)
+
+
+@st.cache_data(ttl=300)
+def load_house_sensitivity():
+    """The "+1pp national shift" caveat, DERIVED rather than typed.
+
+    house_sensitivity.py existed for exactly this and was never wired up, so the
+    warning box carried a hand-pasted "~38% to ~50%" that had already gone stale
+    once. It went stale again the moment the national-environment term landed —
+    the real figures moved by tens of points. Computing it from the same
+    simulate() that produces the headline is the only way the two stay in sync."""
+    predictions, _climate, _approval = load_house_predictions()
+    races = mc_house.build_races(predictions)
+    base_d, base_r = mc_house.baseline_seats(races)
+    return house_sensitivity.format_caveat(
+        house_sensitivity.majority_sensitivity(races, base_d, base_r)
+    )
+
+
+def _house_env_note():
+    """One line on where the national environment came from — it is the largest
+    single term in the lean-only districts, so its provenance belongs on screen
+    next to the probabilities it drives."""
+    env, source = national_environment_margin()
+    return (f"The national environment applied to every district is **D{env:+.1f}** "
+            f"on the margin scale, from {source}; it is inferred, not measured, "
+            f"and it moves the seat total more than any other single input.")
 
 
 def load_sim_or_error(loader, chamber):
@@ -554,17 +598,39 @@ else:
 st.divider()
 st.subheader("2026 House map — Tier 2 (all districts)")
 hdf = load_house_df()
+_h_env, _h_env_source = national_environment_margin()
+st.caption(
+    f"National environment: **D{_h_env:+.1f}** margin ({_h_env_source}), applied to "
+    f"every district's lean baseline. Polled districts feel it at 20% weight — "
+    f"their polls already carry 2026."
+)
 _h_polled = int((hdf["Basis"] == "polls").sum())
 _h_d = int((hdf["Margin"] > 0).sum())
 _h_r = len(hdf) - _h_d
+_h_tilt = int((hdf["Margin"].abs() < TILT_MARGIN_THRESHOLD).sum())
 st.caption(
     f"{len(hdf)} of 435 districts modeled · {_h_polled} poll-backed, "
     f"{len(hdf) - _h_polled} lean-only (shown at reduced opacity) · "
-    f"D leads {_h_d} · R leads {_h_r} — point estimates; control probability below · "
+    f"D leads {_h_d} · R leads {_h_r} — every district is colored for its "
+    f"vote-share leader, including the {_h_tilt} inside {TILT_MARGIN_THRESHOLD:g}pt "
+    f"(the Tilt bands); nothing is left uncalled · point estimates, control "
+    f"probability below · "
     f"⚠️ TX/NC/OH/FL lean and boundaries are both pre-2025 redraw"
 )
 if os.path.exists(CD_GEOJSON_PATH):
-    st.caption("   ".join(f"● {r_name}" for r_name in RATING_ORDER))
+    # Colored swatches, not the plain bullets this used to print: with the
+    # neutral bin gone, the only thing distinguishing the closest districts
+    # from the safest is the shade, so the legend has to show the shades.
+    st.markdown(
+        '<div style="font-size:0.8rem;opacity:0.75;margin-bottom:0.35rem">' +
+        "".join(
+            f'<span style="white-space:nowrap;margin-right:0.9rem">'
+            f'<span style="color:{RATING_COLORS[r_name]};font-size:1.2em">●</span> '
+            f'{r_name}</span>'
+            for r_name in RATING_ORDER
+        ) + "</div>",
+        unsafe_allow_html=True,
+    )
     st.plotly_chart(plot_house_map(hdf), width="stretch")
 else:
     st.warning(
@@ -615,9 +681,10 @@ else:
         f"`calibration.py` are reasoned by analogy and have not been backtested. "
         f"{_hse_sim['n_lean_only']} of {_hse_sim['n_lean_only'] + _hse_sim['n_polled']} "
         f"districts ride on the lean-only σ, itself applied to 2022-vintage lean "
-        f"(95 districts on boundaries that no longer exist). Sensitivity is not "
-        f"academic: a +1pp uniform shift toward D moves P(D majority) from ~38% to "
-        f"~50%. Treat these figures as order-of-magnitude."
+        f"(95 districts on boundaries that no longer exist). "
+        f"{_house_env_note()} "
+        f"{load_house_sensitivity()} "
+        f"Treat these figures as order-of-magnitude."
     )
 
     st.plotly_chart(

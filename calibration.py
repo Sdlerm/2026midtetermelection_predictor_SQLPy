@@ -113,6 +113,80 @@ SIGMA_LOCAL_MARGIN_HOUSE_POLLED = math.sqrt(
 SIGMA_LOCAL_MARGIN_HOUSE_LEAN = math.sqrt(
     SIGMA_TOTAL_MARGIN_HOUSE_LEAN**2 - SIGMA_NATIONAL_MARGIN_HOUSE**2)
 
+# =====================================================================
+# HOUSE NATIONAL ENVIRONMENT (house_model.py)
+# =====================================================================
+# WHY THIS EXISTS (Samuel, 2026-08-10)
+# ------------------------------------
+# 399 of 435 districts have no 2026 polling. Before this section existed, the
+# only 2026 information reaching them was climate_adjustment + approval_
+# adjustment: ±0.32 and ±0.33 points of VOTE SHARE per candidate, i.e. a
+# national environment of D+1.3 on the MARGIN scale. That is not a midterm
+# environment, it is a rounding error, and it left the House forecast pinned to
+# a 2022-vintage PRESIDENTIAL map while the Senate forecast — 80% poll weight,
+# every race polled — absorbed the actual 2026 environment. The two chambers
+# were being asked different questions, which is how the model came to be more
+# confident in Democratic Senate control (a net-4 map through TX/AK/OH/IA) than
+# in a Democratic House (a net-3 map with the president at 39.7% approval).
+#
+# THE RELATIONSHIP
+# ----------------
+# Midterm House national popular vote margin for the PRESIDENT'S party,
+# regressed on Gallup presidential approval at the midterm. One row per midterm
+# since 1994; margins are D_share - R_share signed toward the president's party
+# (negative = president's party lost the national House vote).
+#
+# Sources: House national popular vote from the Clerk of the House official
+# vote statistics; approval from Gallup's final pre-election reading of each
+# cycle. (Compiled 2026-08-10.)
+#
+#   (year, president's party, approval, president's-party House NPV margin)
+MIDTERM_APPROVAL_HISTORY = (
+    (1994, "D", 46.0, -6.8),   # Clinton; R 51.5 - D 44.7
+    (1998, "D", 65.0, -0.9),   # Clinton; post-impeachment backlash, pres party overperformed
+    (2002, "R", 63.0, +4.6),   # Bush; post-9/11, the other pres-party gain
+    (2006, "R", 38.0, -8.0),   # Bush; D 52.3 - R 44.3
+    (2010, "D", 45.0, -6.8),   # Obama; R 51.7 - D 44.9
+    (2014, "D", 42.0, -5.7),   # Obama; R 51.2 - D 45.5
+    (2018, "R", 40.0, -8.6),   # Trump; D 53.4 - R 44.8
+    (2022, "D", 42.0, -2.8),   # Biden; R 50.6 - D 47.8 — the weakest penalty of the set
+)
+
+# Ordinary least squares on the table above, computed rather than pasted so the
+# fit can never drift from the data it claims to come from.
+#   pres_party_margin ≈ MIDTERM_SLOPE * (approval - 50) + MIDTERM_INTERCEPT
+# Current fit: slope 0.360, intercept -3.520, residual SD 2.61.
+#
+# Read the intercept: at 50% approval the president's party still loses the
+# national House vote by ~3.5 points. That is the midterm penalty itself, and
+# it is the term the old econ+approval channel had no way to express.
+def _fit_midterm_approval():
+    xs = [a - 50.0 for (_y, _p, a, _m) in MIDTERM_APPROVAL_HISTORY]
+    ys = [m for (_y, _p, _a, m) in MIDTERM_APPROVAL_HISTORY]
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    slope = (sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+             / sum((x - mx) ** 2 for x in xs))
+    intercept = my - slope * mx
+    resid = [y - (slope * x + intercept) for x, y in zip(xs, ys)]
+    resid_sd = math.sqrt(sum(r * r for r in resid) / (n - 2))
+    return slope, intercept, resid_sd
+
+
+MIDTERM_SLOPE, MIDTERM_INTERCEPT, MIDTERM_RESIDUAL_SD = _fit_midterm_approval()
+
+# Which party holds the White House in the 2026 midterm. The regression is
+# expressed in the president's-party direction; this flips it to the D-margin
+# convention everything downstream uses.
+PRESIDENT_PARTY = "R"
+
+# n=8 with a 2.6-point residual SD is a thin fit, and 1998/2002 are genuine
+# outliers rather than noise. The forecast does NOT treat this term as known:
+# SIGMA_NATIONAL_MARGIN_HOUSE (3.0) is the same order as MIDTERM_RESIDUAL_SD,
+# so the Monte Carlo's correlated national draw already spans the range this
+# regression could plausibly be wrong by. Widening one without the other would
+# double-count the same uncertainty.
+
 # Housekeeping
 N_HOUSE_SEATS = 435
 HOUSE_MAJORITY = 218          # 435 is odd, so there is no tie and no tiebreaker
@@ -132,7 +206,7 @@ SIM_CHUNK_HOUSE = 25_000
 #     N = 10,000  ->  ±0.5 percentage points
 # Plenty of precision given the sigmas above carry far more real-world
 # uncertainty than that. Bump to 100_000 only if runtime stays trivial.
-N_SIMS = 1_000_000
+N_SIMS = 500_000
 
 # ---------------------------------------------------------------------
 # Housekeeping
@@ -166,10 +240,14 @@ SEAT_DECIMAL_PLACES = 0
 # (Samuel, 2026-07-11)
 SAFE_PROBABILITY_THRESHOLD = 0.95
 
-# Margin threshold for calling a race a "toss-up" (i.e., within this many
-# percentage points).
-# (Samuel, 2026-07-11)
-TOSSUP_MARGIN_THRESHOLD = 5.0
+# Margin threshold for the closest rating band, "Tilt" (i.e., within this many
+# percentage points). This band still names a leader — the House rating scale
+# has no neutral bin.
+# (Samuel, 2026-07-11; renamed from TOSSUP_MARGIN_THRESHOLD 2026-08-10 when the
+# House map dropped the neutral "Toss Up" bin and started siding every district
+# with whichever candidate holds the greater projected vote share. Value
+# unchanged at 5.0 — only the label and the color changed.)
+TILT_MARGIN_THRESHOLD = 5.0
 
 # Margin threshold for calling a race "lean" (i.e., within this many
 # percentage points). A "lean" race is MORE competitive than a "likely"

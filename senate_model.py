@@ -8,7 +8,32 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LEAN_ALPHA = 0.82    # poll weight in the blend; (1 - LEAN_ALPHA) = 0.2 is the structural lean weight
+LEAN_ALPHA = 0.82
+# Poll weight in the blend; the structural lean gets the remaining 0.18.
+# (The comment here read "= 0.2" until 2026-08-10 — stale from when the constant
+# was 0.80. house_model.LEAN_ALPHA_HOUSE is still 0.80 and its comment claims to
+# match this one; it no longer does, and that 0.02 is now a deliberate
+# difference rather than a typo, because only this value has been backtested.)
+#
+# BACKTESTED 2026-08-10 against 2018 + 2020 (59 races) — run backtest_senate.py.
+# VERDICT: KEEP 0.82. Not because it won, but because the thing that beats it
+# wins for the wrong reason:
+#   * Minimizing raw RMSE prefers alpha 0.65 (RMSE 5.76 vs 6.10 at 0.82).
+#   * But that gain is BIAS CANCELLATION, not accuracy. Over these two cycles
+#     the poll leg is +3.9 D-biased (the 2020 polling miss) and the lean leg is
+#     -3.8 R-biased (state_lean.csv is a ~2024-vintage file, 8.8 points too R
+#     for 2018). Two unrelated errors with opposite signs happen to cancel near
+#     alpha 0.5-0.65. Tuning the blend weight to exploit that is fitting noise.
+#   * Remove each mix's mean error and ask which has the least SCATTER — the
+#     question a blend weight actually answers — and the optimum is alpha 0.77,
+#     plateau 0.68-0.85. 0.82 sits inside it, 0.02 off the minimum.
+#   * The per-cycle optima disagree completely: 2018 wants 0.84, 2020 wants
+#     0.28. There is no single alpha both cycles endorse, so the pooled 0.65 is
+#     a compromise between two years, not a property of polling.
+# National bias is what SIGMA_NATIONAL_MARGIN and the econ/approval terms are
+# for. Absorbing it into the blend weight would use the wrong knob and would
+# have made 2018 worse (RMSE 3.69 -> 4.54) to make 2020 better.
+LEAN_ALPHA_BACKTEST_NOTE = "2018+2020, n=59; variance-optimal 0.77 (0.68-0.85)"
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.26    # how much economics nudges the poll average; tune this
 APPROVAL_WEIGHT = 0.1
@@ -77,22 +102,34 @@ INDICATOR_DIRECTION = {
 # Core math
 # ---------------------------------------------------------------------------
 
-def days_ago(poll_date_str):
+def days_ago(poll_date_str, as_of=None):
     """
-    Calculates the number of days elapsed since a given date.
-    The function computes the difference in days between the current date and a date
-    provided in ISO format (YYYY-MM-DD).
+    Days elapsed between a poll date and the reference date.
+
     Args:
-        poll_date_str (str): The date in ISO format (YYYY-MM-DD) to calculate the difference from.
+        poll_date_str (str): The date in ISO format (YYYY-MM-DD).
+        as_of (date | str | None): Reference date. None = today, which is the
+            live-forecast behavior. A date makes the clock explicit, which is
+            what a backtest needs: measuring a 2018 poll's staleness against
+            2026 would put its recency weight at exp(-0.0231 * ~2900) ≈ 0, and
+            EVERY historical race would silently collapse to structural lean.
+            The backtest would then be measuring the lean model while looking
+            like it was measuring the polling model.
     Returns:
-        int: The number of days between the provided date and today's date.
+        int: Days between poll_date and as_of. Negative if the poll postdates
+            as_of — callers are expected to have filtered those out already;
+            see recency_weight, which refuses to weight them.
     Raises:
-        ValueError: If the provided date string is not in a valid ISO format.
+        ValueError: If either date string is not valid ISO format.
     """
     poll_date = date.fromisoformat(poll_date_str)
-    return (date.today() - poll_date).days
+    if as_of is None:
+        as_of = date.today()
+    elif isinstance(as_of, str):
+        as_of = date.fromisoformat(as_of)
+    return (as_of - poll_date).days
 
-def recency_weight(poll_date_str):
+def recency_weight(poll_date_str, as_of=None):
     """
     Computes a weight based on the recency of a given poll date.
 
@@ -103,15 +140,22 @@ def recency_weight(poll_date_str):
     Args:
         poll_date_str: A string representing the date of the poll in a
                        recognized format (e.g., "YYYY-MM-DD").
+        as_of: Reference date for "now" (see days_ago). None = today.
 
     Returns:
         float: The computed weight, which lies between 0 and 1, based on how
-               recent the poll date is.
+               recent the poll date is. A poll dated AFTER as_of gets weight 0
+               rather than a weight above 1 — in a backtest that poll is
+               information from the future, and silently up-weighting it would
+               be lookahead bias in its purest form.
 
     Raises:
         ValueError: If the provided poll_date_str is invalid or cannot be parsed.
     """
-    return math.exp(-LAMBDA * days_ago(poll_date_str))
+    elapsed = days_ago(poll_date_str, as_of)
+    if elapsed < 0:
+        return 0.0
+    return math.exp(-LAMBDA * elapsed)
 
 def race_has_non_f_polls(race_id):
     """
@@ -135,7 +179,7 @@ def race_has_non_f_polls(race_id):
     con.close()
     return result
 
-def weighted_average_and_stderr(race_id: int, candidate_id: int):
+def weighted_average_and_stderr(race_id: int, candidate_id: int, as_of=None):
     """
     Compute the weighted average and standard error of polling percentages for
     a specific candidate in a race.
@@ -152,6 +196,10 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int):
         The unique identifier for the race
     candidate_id : int
         The unique identifier for the candidate
+    as_of : date | str | None
+        Reference date for the recency decay, and a hard cutoff: polls dated
+        after it are excluded rather than down-weighted, so a backtest cannot
+        see past its own horizon. None = today (live-forecast behavior).
 
     Returns
     -------
@@ -190,7 +238,7 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int):
     weights = []
     sample_sizes = []
     for pct, poll_date, sample_size, cred, _grade in rows:
-        w = cred * recency_weight(poll_date)
+        w = cred * recency_weight(poll_date, as_of)
         if w > 0:
             pcts.append(pct)
             weights.append(w)
