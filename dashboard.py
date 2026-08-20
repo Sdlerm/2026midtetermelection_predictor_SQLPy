@@ -32,6 +32,7 @@ from calibration import (
     LEAN_MARGIN_THRESHOLD,
     LIKELY_MARGIN_THRESHOLD,
     HOUSE_MAJORITY,
+    N_SIMS,
 )
 from house_model import national_environment_margin, predict_house_races
 from senate_model import ECON_WEIGHT, STATES_WITH_2026_RACES, predict_all_races, project_senate_control
@@ -126,12 +127,14 @@ def load_house_predictions():
 
 @st.cache_data(ttl=300)
 def load_senate_sim():
-    """1,000,000 simulated Senate elections -> probabilities + seat distribution.
+    """calibration.N_SIMS simulated Senate elections -> probabilities + seat
+    distribution.
 
     N_SIMS is deliberately left at its CLI value so the dashboard and
-    monte_carlo_senate.py cannot disagree. RANDOM_SEED is None, so each cache
-    refresh reshuffles; at 1M sims the MC standard error is ~0.05pp, well below
-    displayed precision.
+    monte_carlo_senate.py cannot disagree — which is also why the subheader
+    formats the constant rather than restating it. RANDOM_SEED is None, so each
+    cache refresh reshuffles; at 500k sims the MC standard error is ~0.07pp,
+    well below displayed precision.
     """
     predictions, _climate, _nominees = load_senate_predictions()
     races = mc_senate.build_races(predictions)
@@ -141,7 +144,8 @@ def load_senate_sim():
 
 @st.cache_data(ttl=300)
 def load_house_sim():
-    """1,000,000 simulated House elections -> probabilities + seat distribution.
+    """calibration.N_SIMS simulated House elections -> probabilities + seat
+    distribution.
 
     baseline_seats() takes only `races` here, unlike the Senate's
     (predictions, races): every House seat is up every cycle, so there is no
@@ -247,9 +251,12 @@ def load_predictions():
         margin = -lead_size if leader["party"] == "R" else lead_size
 
         has_polls = leader.get("has_polls", True) and challenger.get("has_polls", True)
-        if has_polls:
+        # None on either side means the margin's uncertainty is unknown, so the
+        # row carries None and plot_race_margins draws no bar. `or 0` here would
+        # silently rebuild the zero-width bar this None is meant to prevent.
+        if has_polls and leader["poll_stderr"] is not None and challenger["poll_stderr"] is not None:
             margin_stderr = round(math.sqrt(
-                (leader["poll_stderr"] or 0) ** 2 + (challenger["poll_stderr"] or 0) ** 2
+                leader["poll_stderr"] ** 2 + challenger["poll_stderr"] ** 2
             ), 1)
         else:
             margin_stderr = None
@@ -571,7 +578,7 @@ if control["flips"]:
 
 # --- Senate Monte Carlo ---
 st.divider()
-st.subheader("Senate outlook — 1,000,000 simulated elections")
+st.subheader(f"Senate outlook — {N_SIMS:,} simulated elections")
 _sen_sim, _sen_err = load_sim_or_error(load_senate_sim, "Senate")
 
 if _sen_err:
@@ -657,7 +664,7 @@ if len(house_flips):
 
 # --- House Monte Carlo ---
 st.divider()
-st.subheader("House outlook — 1,000,000 simulated elections")
+st.subheader(f"House outlook — {N_SIMS:,} simulated elections")
 _hse_sim, _hse_err = load_sim_or_error(load_house_sim, "House")
 
 if _hse_err:

@@ -68,6 +68,7 @@ from senate_model import (
     LEAN_ALPHA,
     lean_baseline,
     load_state_lean,
+    matched_poll_blocks,
     weighted_average_and_stderr,
 )
 
@@ -232,12 +233,19 @@ def build_observations(equal_credibility=False):
                     skipped.append((year, state, "no two-sided candidate pair"))
                     continue
 
+                # Same matched-block restriction the live model applies, for the
+                # same reason the module docstring gives: the sweep is only a
+                # statement about the model if the poll leg is the quantity the
+                # model actually blends. Without it, alpha would be fitted to
+                # margins between averages built from different question sets.
+                blocks = matched_poll_blocks(
+                    race_id, [cands[left_party], cands["R"]], as_of=as_of)
                 left_avg, _se = weighted_average_and_stderr(
-                    race_id, cands[left_party], as_of=as_of)
+                    race_id, cands[left_party], as_of=as_of, blocks=blocks)
                 right_avg, _se = weighted_average_and_stderr(
-                    race_id, cands["R"], as_of=as_of)
+                    race_id, cands["R"], as_of=as_of, blocks=blocks)
                 if left_avg is None or right_avg is None:
-                    skipped.append((year, state, "no polls for one or both sides"))
+                    skipped.append((year, state, "no head-to-head polls for one or both sides"))
                     continue
 
                 # lean_baseline maps 'I' through INDIE_CAUCUS; for these two
@@ -479,10 +487,12 @@ def report(equal_credibility=False, n_boot=2000):
 
 
 def worst_misses(observations, alpha, n=10):
+    # key= on the error alone: without it an exact tie in absolute error falls
+    # through to comparing the observation dicts, which raises TypeError.
     scored = sorted(
         ((abs(alpha * o["poll_margin"] + (1 - alpha) * o["lean_margin"]
               - o["actual_margin"]), o) for o in observations),
-        reverse=True)
+        key=lambda t: t[0], reverse=True)
     return scored[:n]
 
 

@@ -498,7 +498,7 @@ The 8 midterms (1994–2022) the national House environment is regressed from. S
 
 `house_model.py`
 
-60. Below this, a district's two poll averages aren't a general-election matchup; it falls back to lean-only.
+60.  Below this, a district's two poll averages aren't a general-election matchup; it falls back to lean-only.
 
 `RANDOM_SEED`
 
@@ -606,7 +606,7 @@ The SQLite database (`db/elections.db`) contains the following tables:
 -   District lean on post-redistricting maps: replace the 95 stale TX/NC/OH/FL rows via `data/district_lean_overrides.csv` (every `fetch_district_lean.py` run lists them)
 -   **Measured** generic ballot for the House — the `GENERIC_BALLOT_D` slot exists and `national_environment_margin()` prefers it automatically; nothing populates it yet, so the environment is inferred from approval (±2.6pp regression residual, n=8). Needs a live feed; 538's `polls-page` CSVs now return HTML
 -   Incumbency term for the House, so the national environment isn't applied as pure uniform swing over a presidential lean
--   ~~Senate poll-weight review~~ — **done 2026-08-10; `LEAN_ALPHA` stays at 0.82.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: 0.82 is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
+-   Senate poll-weight review — **done 2026-08-10; `LEAN_ALPHA` stays at 0.82.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: 0.82 is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
 -   **Incumbency and house-effect terms for the Senate** — the backtest's worst single miss is 2020 ME: predicted D+5.0, actual R+9.1, a 14-point miss against a four-term incumbent. That is the shape of error an incumbency term catches and a blend weight cannot
 -   Backtested House error σ values to replace the reasoned ones in `calibration.py` — the single biggest source of doubt in `monte_carlo_house.py`
 -   Incumbent party for all 435 districts, so flip detection stops being limited to the ~83 rostered ones

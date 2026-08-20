@@ -18,6 +18,33 @@ HOUSE_MAJORITY = 218
 CHARTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "charts")
 os.makedirs(CHARTS_DIR, exist_ok=True)
 
+
+def _bar_stderr(stderr):
+    """
+    One candidate's stderr as an xerr value: NaN when it is unknown.
+
+    matplotlib draws a real, visible cap at +/-0.0, so mapping a missing
+    stderr to zero tells the reader a lean-only race is known exactly. It
+    skips NaN entirely and draws nothing, which is the honest rendering.
+    Matches dashboard.plot_race_margins, which already relies on plotly
+    skipping NaN the same way, and dashboard.load_predictions, which sets
+    margin_stderr = None rather than "a zero-width one that would claim
+    false certainty".
+    """
+    return float("nan") if stderr is None else stderr
+
+
+def _combine_stderr(d_stderr, r_stderr):
+    """
+    Both candidates' stderrs in quadrature, as the error on their margin.
+
+    NaN if EITHER side is missing: a margin error built from one candidate's
+    uncertainty alone understates it, so half an answer is worse than none.
+    """
+    if d_stderr is None or r_stderr is None:
+        return float("nan")
+    return math.sqrt(d_stderr ** 2 + r_stderr ** 2)
+
 def plot_race_margins():
     """
     Generate a horizontal bar plot visualizing the projected vote margins
@@ -27,10 +54,10 @@ def plot_race_margins():
     This function processes projection data, calculates the vote margins
     for each race, and creates a sorted horizontal bar chart displaying
     these margins. The chart indicates party control via color codes and
-    highlights flipped states. Error bars show polling uncertainty:
-    a weighted standard deviation across polls when 2+ are available,
-    or a sampling-error fallback (using sample size) when only one poll
-    exists for a candidate. It also displays a summary of projected
+    highlights flipped states. Error bars show the standard error of each
+    candidate's polling AVERAGE — it narrows as polling accumulates — with a
+    binomial sampling-error fallback when the weight rests on a single poll.
+    Races with no polling draw no bar at all rather than a zero-width one. It also displays a summary of projected
     Senate control in the chart title, and the final plot is saved as an
     image.
 
@@ -65,7 +92,7 @@ def plot_race_margins():
         d = parties[d_key]
         r = parties["R"]
         margin = d["projected"] - r["projected"]
-        margin_err = math.sqrt((d.get("stderr") or 0) ** 2 + (r.get("stderr") or 0) ** 2)
+        margin_err = _combine_stderr(d.get("stderr"), r.get("stderr"))
         winner_data = d if margin > 0 else r
         states.append(state)
         margins.append(margin)
@@ -202,8 +229,10 @@ def _plot_vote_shares(rows, title, out_name):
     """
     d_pcts = [row[2]["projected"] for row in rows]
     r_pcts = [row[3]["projected"] for row in rows]
-    d_errs = [row[2]["stderr"] or 0 for row in rows]
-    r_errs = [row[3]["stderr"] or 0 for row in rows]
+    # NaN, not 0: matplotlib draws visible caps at +/-0.0 but skips NaN
+    # entirely, which is what a candidate with no polling should show.
+    d_errs = [_bar_stderr(row[2]["stderr"]) for row in rows]
+    r_errs = [_bar_stderr(row[3]["stderr"]) for row in rows]
     y = range(len(rows))
     # Bars are 0.36 tall on centres 0.40 apart, leaving a ~2px surface gap
     # between the pair at the 0.42 in/row this figure is sized to.
@@ -292,9 +321,10 @@ def plot_vote_shares():
     2026 Senate races, displaying incumbency status, flips, and candidate names.
 
     One horizontal row per race, sorted by D margin, with error bars showing
-    polling uncertainty (weighted standard deviation across polls, or a
-    sampling-error fallback when only one poll exists). See `_plot_vote_shares`
-    for the layout itself.
+    the standard error of each candidate's polling average (or a binomial
+    sampling-error fallback when the weight rests on a single poll), and no
+    bar where there is no polling. See `_plot_vote_shares` for the layout
+    itself.
 
     ### Notes
     - This function relies on `predict_all_races` to provide predictions for all Senate races.
@@ -441,7 +471,7 @@ def plot_house_race_margins():
 
     races, margins, colors, flips, y_labels, margin_errs = [], [], [], [], [], []
     for race, d_key, d_info, r_info, margin in rows:
-        margin_err = math.sqrt((d_info.get("stderr") or 0) ** 2 + (r_info.get("stderr") or 0) ** 2)
+        margin_err = _combine_stderr(d_info.get("stderr"), r_info.get("stderr"))
         winner_data = d_info if margin > 0 else r_info
         races.append(race)
         margins.append(margin)

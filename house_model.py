@@ -80,7 +80,7 @@ from senate_model import (
     weighted_average_and_stderr,
     get_climate_score, climate_adjustment,
     get_approval_score, approval_adjustment,
-    _finalize_race,
+    _finalize_race, two_way_poll_sum_ok, matched_poll_blocks,
 )
 from house_ingest import load_house_nominees, _pad
 
@@ -91,11 +91,6 @@ LEAN_ALPHA_HOUSE = 0.80   # (1-alpha) = 0.20 is the lean weight
 # which are sparser and more often partisan-sponsored. See backtest_senate.py
 # for the Senate result and why a House equivalent needs historical district
 # lean vintages before it can be run at all.
-
-# Minimum plausible sum of the top two candidates' poll averages for the pair to
-# be read as a two-way general-election matchup. See the guard in
-# predict_house_races for why this is a data-KIND check, not an undecided knob.
-MIN_TWO_WAY_POLL_SUM = 60.0
 
 DISTRICT_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "district_lean.csv")
 
@@ -262,6 +257,10 @@ def predict_house_races(year=2026):
             (p for p in parties if roster[(state, district, p)].get("is_incumbent")), ""
         )
 
+        # Resolve every nominee to a candidate row FIRST — the matched-block set
+        # is a property of the finalist field as a whole, so it cannot be
+        # computed inside the per-candidate loop that consumes it.
+        contenders = []
         for party in parties:
             info = roster[(state, district, party)]
             cur.execute(
@@ -271,7 +270,13 @@ def predict_house_races(year=2026):
             row = cur.fetchone()
             if not row:
                 continue                     # nominee never appeared in polls — skip (scripture rule)
-            poll_avg, poll_stderr = weighted_average_and_stderr(race_id, row[0])
+            contenders.append((party, info, row[0]))
+
+        blocks = matched_poll_blocks(race_id, [c[2] for c in contenders])
+
+        for party, info, candidate_id in contenders:
+            poll_avg, poll_stderr = weighted_average_and_stderr(
+                race_id, candidate_id, blocks=blocks)
             if poll_avg is None:
                 continue
 
@@ -295,31 +300,11 @@ def predict_house_races(year=2026):
                 "incumbent_known": bool(incumbent_party),
             })
 
-        # Poll averages that cannot be a two-way general election. AK-01 is the
-        # live example: its "Democratic nominee" averages 3.8%, a primary-field
-        # share, against a Republican at 48.9% — a sum of 52.7. Blending that
-        # against a two-party lean baseline (which sums to 100 by construction)
-        # produced a projected R+37.6 in a district whose lean is R+14.6. The
-        # scales are not comparable, so the polled projection is discarded and
-        # the lean-only pass rebuilds the district. Same spirit as the
-        # never-polled-nominee rule above: a gap is better than a bad number.
-        #
-        # The bar is deliberately low. Early House polls legitimately leave 25-30%
-        # undecided (IA-02 sums to 69), and those are usable — the blend shrinks
-        # their margins a little, which is a known and modest bias. This catches
-        # data that is the wrong KIND, not data that is merely undecided-heavy.
-        if len(finalists) >= 2:
-            top_two = sorted(finalists, key=lambda f: f["poll_avg"], reverse=True)[:2]
-            poll_sum = sum(f["poll_avg"] for f in top_two)
-            if poll_sum < MIN_TWO_WAY_POLL_SUM:
-                print(f"WARNING: {state}-{district} polled shares sum to {poll_sum:.1f} "
-                      f"(< {MIN_TWO_WAY_POLL_SUM:.0f}) — not a two-way general-election "
-                      f"average; falling back to lean-only for this district.")
-                finalists = []
-
         # A one-sided polled race is a data gap, not a contest — discard it and
-        # let the lean-only pass below rebuild the district coherently.
-        if len(finalists) < 2:
+        # let the lean-only pass below rebuild the district coherently. The same
+        # goes for a pair whose shares cannot be a two-way general election; the
+        # guard is shared with the Senate, see senate_model.two_way_poll_sum_ok.
+        if len(finalists) < 2 or not two_way_poll_sum_ok(finalists, f"{state}-{district}"):
             continue
 
         results.extend(_finalize_race(finalists))
@@ -409,7 +394,10 @@ if __name__ == "__main__":
             inc    = " [incumbent]" if r["is_incumbent"] else ""
             flip   = " ⚡FLIP" if r.get("winner") and r.get("is_flip") else ""
             if r["has_polls"]:
-                detail = f"poll: {r['poll_avg']:.1f}% ±{r['poll_stderr']:.1f}%  lean+env: {r['lean']:.1f}%"
+                # stderr is None when a lone poll recorded no sample size —
+                # unknown, not zero. Say so rather than crashing on the format.
+                err = f"±{r['poll_stderr']:.1f}%" if r["poll_stderr"] is not None else "±?"
+                detail = f"poll: {r['poll_avg']:.1f}% {err}  lean+env: {r['lean']:.1f}%"
             else:
                 detail = f"lean+env only: {r['lean']:.1f}%"
             print(f"  {marker} {r['party']}  {r['name']:<28} {detail}  "

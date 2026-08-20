@@ -42,6 +42,13 @@ APPROVAL_WEIGHT = 0.1
 # half of ECON_WEIGHT as a placeholder, not a validated value
 TOSSUP_THRESHOLD_PP = 1.2 #if the finalists shares are w/i 1.2pp, flag as "toss-up"
 
+# Minimum plausible sum of the top two candidates' poll averages for the pair to
+# be read as a two-way general-election matchup. Lives here rather than in
+# house_model because both chambers enforce it through two_way_poll_sum_ok();
+# house_model imports it. See that function for why it is a data-KIND check,
+# not an undecided knob.
+MIN_TWO_WAY_POLL_SUM = 60.0
+
 
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
 STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
@@ -179,7 +186,61 @@ def race_has_non_f_polls(race_id):
     con.close()
     return result
 
-def weighted_average_and_stderr(race_id: int, candidate_id: int, as_of=None):
+
+def matched_poll_blocks(race_id, candidate_ids, as_of=None):
+    """
+    The (pollster_id, poll_date) blocks in this race that poll EVERY one of
+    candidate_ids. Same principle as race_has_non_f_polls: a rule that decides
+    which polls count must be applied race-wide, so every finalist's average is
+    built from the same poll set.
+
+    Why this exists. weighted_average_and_stderr runs per candidate over that
+    candidate's own rows, so without this the two averages need not come from
+    the same question — and a "margin" between them is then not a margin at
+    all. Senate ID is the live case: 3 of its 6 blocks poll Risch with no Roth
+    counterpart, including the two most recent and therefore heaviest under the
+    recency decay (2026-08-07 at 34, 2026-08-13 at 52). Averaging Risch over 6
+    blocks and Roth over 3 compared a well-polled incumbent against a sparsely
+    polled challenger and called the difference a lead.
+
+    Scope is the FINALISTS, not every candidate with a row in the race. Primary
+    fields live in the same race_id — TX has 8 polled candidates, ME 5 — so
+    requiring all of them to appear in a block matches nothing anywhere and
+    would collapse all 23 polled Senate races to lean-only.
+
+    A block dated after as_of is excluded, not just zero-weighted, so a
+    backtest cannot use a future poll to qualify a block it then averages over.
+
+    Returns a set. Empty means no question ever tested this matchup head-to-
+    head; callers get (None, None) per candidate and the race falls through to
+    the lean-only path, which is the correct answer rather than a gap.
+    """
+    candidate_ids = set(candidate_ids)
+    if not candidate_ids:
+        return set()
+
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute(
+        "SELECT pollster_id, poll_date, candidate_id FROM polls "
+        "WHERE race_id = ? AND candidate_id IN (%s)"
+        % ",".join("?" * len(candidate_ids)),
+        (race_id, *candidate_ids),
+    )
+    rows = cur.fetchall()
+    con.close()
+
+    seen = {}
+    for pollster_id, poll_date, candidate_id in rows:
+        if as_of is not None and days_ago(poll_date, as_of) < 0:
+            continue
+        seen.setdefault((pollster_id, poll_date), set()).add(candidate_id)
+
+    return {block for block, polled in seen.items() if polled >= candidate_ids}
+
+
+def weighted_average_and_stderr(race_id: int, candidate_id: int, as_of=None,
+                                blocks=None):
     """
     Compute the weighted average and standard error of polling percentages for
     a specific candidate in a race.
@@ -200,24 +261,46 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int, as_of=None):
         Reference date for the recency decay, and a hard cutoff: polls dated
         after it are excluded rather than down-weighted, so a backtest cannot
         see past its own horizon. None = today (live-forecast behavior).
+    blocks : set[tuple] | None
+        Restrict the average to these (pollster_id, poll_date) blocks. Callers
+        pass matched_poll_blocks(...) so every finalist in a race is averaged
+        over the same questions; see that function. None = no restriction,
+        which is the right default for any caller averaging one candidate in
+        isolation.
 
     Returns
     -------
-    tuple of (float, float) or (None, None)
-        A tuple containing the weighted average percentage (rounded to 1 decimal
-        place) and standard error (rounded to 2 decimal places). Returns
+    tuple of (float, float | None) or (None, None)
+        The weighted average percentage (rounded to 2 decimals) and the
+        standard error OF THAT AVERAGE (rounded to 2 decimals) — how uncertain
+        the mean is, so it narrows as polling accumulates. Not the spread of
+        the polls themselves; see the n_eff branch below.
+
+        The stderr alone is None when a race rests on a single poll whose
+        sample size was never recorded: unknown, which display code renders as
+        no error bar rather than a zero-width one. Callers must therefore
+        tolerate a None stderr alongside a real average.
+
         (None, None) if no valid polls are found or all weights are zero.
     """
     con = get_connection()
     cur = con.cursor()
     cur.execute("""
-            SELECT p.pct, p.poll_date, p.sample_size, COALESCE(po.credibility, 1.0), po.grade
+            SELECT p.pct, p.poll_date, p.sample_size, COALESCE(po.credibility, 1.0),
+                   po.grade, p.pollster_id
             FROM polls p
             LEFT JOIN pollsters po ON p.pollster_id = po.id
             WHERE p.race_id = ? AND p.candidate_id = ?
         """, (race_id, candidate_id))
     rows = cur.fetchall()
     con.close()
+
+    if blocks is not None:
+        # Drop rows from questions that did not test the full finalist field.
+        # An empty result here is a real answer — this candidate was never
+        # polled head-to-head — so it returns the same (None, None) as "no
+        # polls at all" and the caller's lean-only path takes over.
+        rows = [r for r in rows if (r[5], r[1]) in blocks]
 
     if not rows:
         return None, None
@@ -237,7 +320,7 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int, as_of=None):
     pcts = []
     weights = []
     sample_sizes = []
-    for pct, poll_date, sample_size, cred, _grade in rows:
+    for pct, poll_date, sample_size, cred, _grade, _pollster_id in rows:
         w = cred * recency_weight(poll_date, as_of)
         if w > 0:
             pcts.append(pct)
@@ -250,21 +333,45 @@ def weighted_average_and_stderr(race_id: int, candidate_id: int, as_of=None):
     w_sum = sum(weights)
     mean = sum(w * p for w, p in zip(weights, pcts)) / w_sum
 
-    if len(weights) == 1:
-        # Only one poll: no poll-to-poll spread to measure, so fall back to
-        # the binomial sampling error implied by that poll's sample size.
-        n = sample_sizes[0]
+    # Effective sample size (Kish): how many polls this average is really made
+    # of, once the credibility x recency weights are accounted for. Three polls
+    # where one carries most of the weight are worth ~1.2 polls, not 3.
+    n_eff = (w_sum ** 2) / sum(w * w for w in weights)
+
+    if n_eff <= 1:
+        # One poll, or weight so concentrated on one poll that there is no
+        # usable poll-to-poll spread. Fall back to the binomial sampling error
+        # implied by the dominant poll's sample size.
+        # key= on the weight alone: tied weights would otherwise fall through
+        # to comparing sample sizes, which may be None.
+        n = max(zip(weights, sample_sizes), key=lambda t: t[0])[1]
         if n:
             p = mean / 100
             stderr = math.sqrt(p * (1 - p) / n) * 100
         else:
-            stderr = 0.0  # sample size not recorded; nothing to estimate from
+            # Sample size not recorded, so there is nothing to estimate from.
+            # None, not 0.0 — the uncertainty is UNKNOWN, and returning zero
+            # would render as a zero-width error bar claiming false certainty.
+            # Display code maps None to NaN and draws no bar; see charts.py.
+            stderr = None
     else:
-        # Weighted variance (uncorrected/population form — no small-sample bias correction applied)
+        # Standard error OF THE MEAN, not the spread of the polls. The weighted
+        # variance below measures how much individual polls disagree; dividing
+        # by the effective sample size converts that into how uncertain their
+        # AVERAGE is, which is the quantity an error bar drawn on an average
+        # represents. (Was sqrt(var) — the weighted SD — until 2026-08-19,
+        # which made a race with 25 scattered polls draw a WIDER bar than one
+        # with 2 tight ones, exactly backwards.)
+        #
+        # The n_eff - 1 denominator is the unbiased form: var * n_eff/(n_eff-1)
+        # for the sample variance, then / n_eff for the mean, which cancels to
+        # var / (n_eff - 1). It cuts well-polled races roughly threefold (TX
+        # 2.94 -> 1.01) and WIDENS thin ones (KS 1.16 -> 3.34). Both directions
+        # are the point: bar width now tracks how much polling actually exists.
         var = sum(w * (p - mean)**2 for w, p in zip(weights, pcts)) / w_sum
-        stderr = math.sqrt(var) if var > 0 else 0.0
+        stderr = math.sqrt(var / (n_eff - 1)) if var > 0 else 0.0
 
-    return round(mean, 2), round(stderr, 2)
+    return round(mean, 2), (None if stderr is None else round(stderr, 2))
 
 # ---------------------------------------------------------------------------
 # Economic climate score
@@ -501,6 +608,52 @@ def _finalize_race(finalists):
         f["margin"] = round(margin, 2)
     return finalists
 
+
+def two_way_poll_sum_ok(finalists, label):
+    """
+    True if the top two poll averages can plausibly be a two-way general
+    election. Shared by both chambers so they can never drift apart.
+
+    Each candidate's average is built from that candidate's own poll rows, so
+    the two need not come from the same question block. When they don't, the
+    pair is not a matchup. AK-01 is the live example: a 3.8% "Democratic
+    nominee" (a primary-field share) against a Republican at 48.9%, sum 52.7.
+    Blending that against a lean baseline — which sums to 100 by construction —
+    mixes incomparable scales, and produced a projected R+37.6 in a district
+    whose lean is R+14.6. The caller discards the polled projection and lets the
+    lean-only pass rebuild the race. Same spirit as the never-polled-nominee
+    rule: a gap is better than a bad number.
+
+    The bar is deliberately low. Early polls legitimately leave 25-30%
+    undecided (House IA-02 sums to 69, Senate SD to 68.7), and those are
+    usable — the blend shrinks their margins a little, which is a known and
+    modest bias. This catches data that is the wrong KIND, not data that is
+    merely undecided-heavy.
+
+    This runs AFTER matched_poll_blocks has already restricted every average to
+    questions that tested the whole finalist field, and it still earns its
+    keep: the two checks catch different things. Mismatched poll SETS are the
+    block filter's job, and it is the precise instrument for them — the sum is
+    only a proxy, and a loose one (ID had the defect while summing to 60.7,
+    which no threshold rejects without also rejecting SD at 68.7, a legitimate
+    undecided-heavy race). What survives block matching is a genuine head-to-
+    head question whose SHARES are still not general-election shares: AK-01
+    polls both nominees in the same question and still sums to 48.6, because
+    what it is measuring is a primary field.
+    """
+    if len(finalists) < 2:
+        return True                  # the len < 2 rule already discards these
+
+    top_two = sorted(finalists, key=lambda f: f["poll_avg"], reverse=True)[:2]
+    poll_sum = sum(f["poll_avg"] for f in top_two)
+    if poll_sum < MIN_TWO_WAY_POLL_SUM:
+        print(f"WARNING: {label} polled shares sum to {poll_sum:.1f} "
+              f"(< {MIN_TWO_WAY_POLL_SUM:.0f}) — not a two-way general-election "
+              f"average; falling back to lean-only for this race.")
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Prediction
 # ---------------------------------------------------------------------------
@@ -547,26 +700,32 @@ def predict_all_races(year=2026):
 
         state_parties = [p for (s, p) in nominees if s == state]
 
+        # Resolve every nominee to a candidate row FIRST. The matched-block set
+        # is a property of the finalist field as a whole, so it cannot be
+        # computed inside the per-candidate loop that consumes it.
+        contenders = []
+        con = get_connection()
+        cur = con.cursor()
         for party in state_parties:
             nominee_info = nominees.get((state, party))
             if not nominee_info:
                 continue
-            name = nominee_info["name"]
-
-            con = get_connection()
-            cur = con.cursor()
             cur.execute(
                 "SELECT id FROM candidates WHERE race_id = ? AND name = ?",
-                (race_id, name)
+                (race_id, nominee_info["name"])
             )
             row = cur.fetchone()
-            con.close()
+            if row:                      # never polled — skip (scripture rule)
+                contenders.append((party, nominee_info, row[0]))
+        con.close()
 
-            if not row:
-                continue
+        blocks = matched_poll_blocks(race_id, [c[2] for c in contenders])
 
-            candidate_id = row[0]
-            poll_avg, poll_stderr = weighted_average_and_stderr(race_id, candidate_id)
+        for party, nominee_info, candidate_id in contenders:
+            name = nominee_info["name"]
+
+            poll_avg, poll_stderr = weighted_average_and_stderr(
+                race_id, candidate_id, blocks=blocks)
             if poll_avg is None:
                 continue
 
@@ -602,7 +761,9 @@ def predict_all_races(year=2026):
         # A race is poll-based only if BOTH finalists have poll averages.
         # A lone polled candidate is a data gap, not a contest — discard and
         # let the lean-only fallback below rebuild the whole race coherently.
-        if len(finalists) < 2:
+        # The same goes for a pair whose shares cannot be a two-way general
+        # election; see two_way_poll_sum_ok.
+        if len(finalists) < 2 or not two_way_poll_sum_ok(finalists, state):
             continue
 
         results.extend(_finalize_race(finalists))
@@ -716,11 +877,28 @@ def project_senate_control(predictions):
     # loop-nesting mistake dies loudly here instead of producing a quietly
     # wrong forecast — but an ordinary data gap (a tracked state losing all
     # its polls) degrades into "not called" rather than crashing.
+    #
+    # RAISES rather than asserts, for two reasons. An `assert` is stripped
+    # under `python -O`, so the one build where this matters most is the one
+    # where it silently returns a wrong seat total. And AssertionError is not
+    # ValueError: dashboard.load_sim_or_error catches ValueError precisely so
+    # one chamber's data gap cannot blank the other, and load_predictions()
+    # calls this function at dashboard.py module top level — an AssertionError
+    # there takes the whole page down instead of the Senate section.
+    # Mirrors monte_carlo_senate.baseline_seats, promoted for the same reason.
     total = projected_r + projected_d + not_called
-    assert total == 100, (
-        f"Seat accounting broken: R={projected_r} + D={projected_d} + "
-        f"not_called={not_called} = {total}, expected 100. seen_states={len(seen_states)}"
-    )
+    if total != 100:
+        raise ValueError(
+            f"Senate seat accounting broken: R={projected_r} + D={projected_d} + "
+            f"not_called={not_called} = {total}, expected 100 "
+            f"(seen_states={len(seen_states)}).\n"
+            f"Every seat must be counted exactly once — projected for a party or "
+            f"left uncalled, never both and never neither.\n"
+            f"Usual causes: a state counted under two parties by the "
+            f"INDIE_CAUCUS convention; a STATES_WITH_2026_RACES entry with no "
+            f"prediction and no UNTRACKED_HOLDS fallback; or SAFE_D/SAFE_R "
+            f"drifting out of date against the seats not up this cycle."
+        )
 
     if projected_r > 50:
         control = "Republicans"
