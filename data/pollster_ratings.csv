@@ -3,22 +3,42 @@ Pollster,Pollster Rating Name,Pollster Rating ID,grade,numeric_grade
 Advantage Inc.,Advantage,747.0,C/D,1.0
 Alaska Survey Research,Alaska Survey Research,155.0,A/B,2.4
 American Pulse Research & Polling,American Pulse Research & Polling,836.0,C/D,1.0
+American Research Group,American Research Group,157.0,A-,2.6
+American Viewpoint,American Viewpoint,158.0,B/C,1.6
+Anzalone Liszt Grove Research,Anzalone Liszt Grove Research,159.0,A/B,2.4
+AP-NORC,AP-NORC Center for Public Affairs Research,462.0,A/B,2.4
+AtlasIntel,Atlas Intel,,A-,2.6
 Barbara Jordan Public Policy Research and Survey Center,Barbara Jordan Public Policy Research and Survey Center,,C/D,1.0
+BDPC,BDPC,160.0,B/C,1.6
 Beacon Research/Shaw & Company Research,Beacon Research/Shaw & Co. Research,103.0,A,2.8
+Bedrock Polling, Bedrock Polling,,B/C,1.6
 Big Data Poll,Big Data Poll,251.0,F,0.2
+Blueprint Polling, Blueprint Polling,,B/C,1.6
 Bowling Green State University Democracy and Public Policy Research Network/YouGov,Bowling Green State University/YouGov,868.0,C/D,1.0
 Change Research,Change Research,48.0,B-,1.8
 Cherry Communications,Cherry Communications,49.0,B/C,1.6
 CNN/SSRS,CNN/SSRS Polling,50.0,A-,2.6
 Civics Analytics,Civics Analytics,52.0,B/C,1.6
 co/efficient,co/efficient,514.0,B+,2.2
+Cole Hargrave, Cole Hargrave,,B/C,1.6
+Colorado Community Research,Colorado Community Research,,C,1.2
+CWS Research,CWS Research,,B/C,1.6
 Cygnal Political,Cygnal,67.0,A,2.8
+Cygnal,Cygnal,67.0,A,2.8
 Data for Progress,Data for Progress,522.0,B,2.0
+Deep Root Analytics,Deep Root Analytics,68.0,A/B,2.4
+Democracy Corps, Democracy Corps,69.0,A/B,2.4
+Democracy Corps/Greenberg Quinlan Rosner Research,Democracy Corps/Greenberg Quinlan Rosner Research,70.0,A/B,2.4
+DHM Research,DHM Research,71.0,A/B,2.4
+Dartmouth College,Dartmouth College,72.0,A-,2.6
+Dartmouth College/YouGov,Dartmouth College/YouGov,73.0,A-,2.6
+Davis Research, Davis Research,74.0,B/C,1.6
 Echelon Insights,Echelon Insights,407.0,A/B,2.4
 EMC Research,EMC Research,130.0,B/C,1.6
 Emerson College,Emerson College,88.0,A-,2.6
 EPIC-MRA,EPIC-MRA,84.0,A-,2.6
 "Fabrizio, Lee & Associates","Fabrizio, Lee & Associates",90.0,A/B,2.4
+Gallup, Gallup Poll,91.0,A,2.8
 GBAO,GBAO,109.0,B/C,1.6
 "Glengariff Group, Inc.",Glengariff Group,117.0,B/C,1.6
 Global Strategy Group,Global Strategy Group,118.0,B/C,1.6
@@ -32,9 +52,9 @@ Harris Insights & Analytics,Harris Insights & Analytics,135.0,A/B,2.4
 Harris Poll,Harris Poll,136.0,A/B,2.4
 Harris, Harris Poll,136.0,A/B,2.4
 High Point University,High Point University Survey Research Center,139.0,B/C,1.6
-Impact Research,Impact Research,14.0,B/C,1.6
-InsiderAdvantage,InsiderAdvantage,243.0,B,2.0
-Ipsos,Ipsos,243.0,B,2.0
+Impact Research,Impact Research,14.0,A-,2.6
+InsiderAdvantage,InsiderAdvantage,243.0,A-	,2.6
+Ipsos,Ipsos,154.0,B,2.0
 JMC Enterprises,JMC Analytics,156.0,B/C,1.6
 Kaplan Strategies,Kaplan Strategies,124.0,B,2.0
 Lake Research Partners,Lake Research Partners,165.0,A/B,2.4
@@ -53,6 +73,7 @@ Peak Insights,Moore Information Group,217.0,B/C,1.6
 Pew Research Center, Pew Research Center,221.0,A,2.8
 Pinnacle Research Group,Pinnacle Research Group,222.0,B/C,1.6
 Praecones Analytica,Praecones Analytica,257.0,B/C,1.6
+PRRI, PRRI Polling,,A-,2.6
 Public Opinion Strategies, Public Opinion Strategies,,B,2.0
 Public Policy Polling,Public Policy Polling,263.0,A-,2.6
 Pulse Decision Science,Pulse Decision Science,,C/D,1.0
@@ -63,6 +84,7 @@ Rasmussen Reports,Rasmussen Reports,270.0,B,2.0
 Ragnar Research Partners,Ragnar Research Partners,517.0,B/C,1.6
 Remington,Remington Research Group,279.0,B,2.0
 Responsive Management,Responsive Management,,C/D,1.0
+RMG Research, RMG Research,,B,2.0
 Rosetta Stone,Rosetta Stone,,C/D,1.0
 Siena University, Siena University,,A+,3.0
 Slingshot Strategies,Slingshot Strategies,451.0,B/C,1.6

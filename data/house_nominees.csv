@@ -32,7 +32,7 @@ FL,23,Lois Frankel,Deborah Adeimy,,1.0,,Jared Moskowitz; Oliver Larkin,,primary
 FL,25,Oliver G. Gilbert III,Te Mayonna Brown,,1
 FL,27,Eliott Rodriguez,Maria Elvira Salazar,,,1,Alexander Fornino; Daniella Levine Cava; Eliott Rodriguez; Mike Davey; Richard Lamondin; Robin Peguero,Maria Elvira Salazar; María Elvira Salazar,
 FL,28,Hector Mujica,Carlos A. Gimenez,,,1,Hector Mujica,Carlos A. Gimenez,
-HI,1,Ed Case,,,1.0,,Della Au Belatti; Ed Case; Jarrett Keohokalole,,primary
+HI,1,Ed Case,Adriel Lam	,,1.0,,,,
 IA,1,Christina Bohannan,Mariannette Miller-Meeks,,,1,Christina Bohannan,Mariannette Miller-Meeks,
 IA,2,Lindsay James,Joe Mitchell,,,1,Lindsay James,Joe Mitchell,
 IA,3,Sarah Trone Garriott,Zach Nunn,,,1,Jennifer Konfrst; Sarah Trone Garriott,Zach Nunn,
@@ -41,8 +41,8 @@ IL,4,Raymond Lopez,Robert Cruz,,1
 IN,5,Deborah Pickett,Victoria Spartz,,,1
 KY,4,Melissa Claire Strange,Ed Gallrhein,,,1,,,
 KY,6,Todd Kelly,Andy Barr,,,1
-MA,6,,,,1.0,,Beth Andres-Beck; Dan Koh; Jamie Belsito; John Beccia; Mariah Lancaster; Tram Nguyen,,primary
-MA,8,,,,1.0,,Patrick Roath; Stephen F. Lynch,,primary
+MA,6,Dan Koh,Micah Jones,,1.0,,Beth Andres-Beck; Dan Koh; Jamie Belsito; John Beccia; Mariah Lancaster; Tram Nguyen,,primary
+MA,8,Stephen F. Lynch,Robert Burke,,1.0,,Patrick Roath; Stephen F. Lynch,,primary
 MD,5,Adrian Boafo,Chris Chaffee,,1.0,,Adrian Boafo; Arthur Ellis; Harry Dunn; Harry Jarin; Nicole Williams; Quincy Bareebe; Rushern Baker; Wala Blegay,,primary
 MD,6,April McClain Delaney,Robin Ficker,,1.0,,April McClain Delaney; David J. Trone,,primary
 ME,2,Joseph M. Badacci,Paul R. LePage,,1.0,,Jared Forrest Golden; Joe Baldacci; Jordan Wood; Matt Dunlap,Paul R. LePage,
@@ -59,7 +59,7 @@ NC,10,Ashley Bell,Pat Harrigan,,,1,Ashley Bell,Pat Harrigan,
 NC,14,LaKesha Womack,Tim Moore,,,1,LaKesha Womack,Tim Moore,
 NE,1,Chris Backemeyer,Mike Flood,,,1,Chris Backemeyer,Mike Flood,
 NE,2,Denise Powell,Brinker Harding,,,1,Denise Powell; John Cavanaugh,,
-NH,1,Alice Wade,,,1.0,,Alice Wade; Bill Conlin; Carleigh Beriont; Christian Urrutia; Heath Howard; Jared Sullivan; Jeanne Shaheen; Maura Sullivan; Roxanne Conlin; Sarah Chadzynski; Stefany Shaheen,,primary
+NH,1,Stefany Shaheen,Anthony DiLorenzo,,1.0,,Alice Wade; Bill Conlin; Carleigh Beriont; Christian Urrutia; Heath Howard; Jared Sullivan; Jeanne Shaheen; Maura Sullivan; Roxanne Conlin; Sarah Chadzynski; Stefany Shaheen,,primary
 NH,2,Maggie Goodlander,Lily Tang Williams,,1.0,,Maggie Goodlander,Lily Tang Williams,
 NJ,2,Zack Mullock,Jeff Van Drew,,,1,,Jeff Van Drew,
 NJ,7,Rebecca Bennett,Thomas H. Kean Jr.,,,1,Rebecca Bennett; Tina Shah,Thomas H. Kean; Thomas H. Kean Jr.,
@@ -79,6 +79,7 @@ NY,21,Blake Gendebien,Anthony Constantino,,,1,,Anthony Constantino; Robert Smull
 OH,7,Matthew Diemer,Max Miller,,,1
 OH,9,Marcy Kaptur,Derek Merrin,,1.0,,Marcy Kaptur,Derek Merrin,
 OH,10,Amy Cox,Mike Turner,,,1
+OH,15,Don Leonard,Mike Carey,Brennan Barrington	,,1,,,
 PA,1,Bob Harvie,Brian Fitzpatrick,,,1,Bob Harvie,Brian Fitzpatrick,
 PA,7,Susan Wild,Ryan Mackenzie,,1
 PA,8,Paige Cognetti,Rob Bresnahan Jr.,,,1,Paige Cognetti,Rob Bresnahan Jr.,
