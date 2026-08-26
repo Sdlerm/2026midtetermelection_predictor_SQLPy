@@ -13,7 +13,7 @@ from init_db import get_connection
 # Unmatched pollsters default to C/D = 1.0 (unknown = unproven).
 # F pollsters keep a small nonzero numeric but are excluded per-race in
 # senate_model.py unless they are the only polling available for that race.
-RATINGS_PATH = os.path.join(os.path.dirname(__file__), "data", "pollster_ratings.csv")
+RATINGS_PATH = os.path.join(os.path.dirname(__file__), "pollster_ratings.csv")
 
 EXPECTED_COLUMNS = [
     "Pollster",

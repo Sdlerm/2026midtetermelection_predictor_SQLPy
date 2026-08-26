@@ -3,7 +3,7 @@ import pandas as pd
 from init_db import get_connection
 from senate_ingest import upsert_pollster, upsert_race, upsert_candidate
 
-_HOUSE_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "house_nominees.csv")
+_HOUSE_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "house_nominees.csv")
 _HOUSE_POLLS_PATH    = os.path.join(os.path.dirname(__file__), "data", "house.csv")
 
 

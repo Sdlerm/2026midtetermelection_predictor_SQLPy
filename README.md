@@ -11,13 +11,9 @@ project/
 ├── data/
 │   ├── senate.csv                  # Senate polling data — NYT polls feed
 │   ├── house.csv                   # House polling data (generic ballot + district) — NYT polls feed
-│   ├── senate_nominees.csv         # Ground truth: confirmed Senate general election candidates
-│   ├── house_nominees.csv          # Ground truth: confirmed House nominees per district (wide format)
-│   ├── state_lean.csv              # State structural lean data
 │   ├── district_lean.csv           # District structural lean (GENERATED — run fetch_district_lean.py)
 │   ├── district_lean_overrides.csv # Hand-maintained district lean corrections (always wins)
 │   ├── president.csv               # Presidential approval polling data (Trump approval)
-│   ├── pollster_ratings.csv        # Pollster letter grades (from 538's archived 2023 ratings)
 │   ├── fetch_nyt_polls.sh          # Helper script: downloads fresh NYT poll CSVs as nyt_*.csv
 │   ├── cd119.geojson               # 119th Congress district boundaries (generated, gitignored)
 │   ├── charts/                     # Generated chart PNGs land here
@@ -28,6 +24,10 @@ project/
 │   └── 2024-senate-state.csv       # Historical results (MEDSL raw precinct format)
 ├── db/
 │   └── elections.db                # SQLite database — auto-created by init_db.py
+├── senate_nominees.csv             # Ground truth: confirmed Senate general election candidates
+├── house_nominees.csv              # Ground truth: confirmed House nominees per district (wide format)
+├── state_lean.csv                  # State structural lean data
+├── pollster_ratings.csv            # Pollster letter grades (from 538's archived 2023 ratings)
 ├── init_db.py                      # Creates the database schema (Senate + House district support)
 ├── senate_ingest.py                # Loads Senate polling CSV into the database
 ├── house_ingest.py                 # Loads House polling CSV + district nominee roster
@@ -84,7 +84,7 @@ Polling CSVs come from the NYT polls feed:
 
 ### 4. Nominees files
 
-**`data/senate_nominees.csv`** is manually maintained. It tells the model which candidates are the confirmed general election nominees, filtering out primary-era poll noise. Format:
+**`senate_nominees.csv`** (project root) is manually maintained. It tells the model which candidates are the confirmed general election nominees, filtering out primary-era poll noise. Format:
 
 ```csv
 state,party,name
@@ -94,11 +94,11 @@ KY,D,Charles Booker
 ...
 ```
 
-**`data/house_nominees.csv`** is the House equivalent, in wide format (one row per district with `dem_nominee` and `rep_nominee` columns). A district enters the roster only when **both** nominees are filled in; anything else is skipped with a reason printed in the ingest summary.
+**`house_nominees.csv`** is the House equivalent, in wide format (one row per district with `dem_nominee` and `rep_nominee` columns). A district enters the roster only when **both** nominees are filled in; anything else is skipped with a reason printed in the ingest summary.
 
 ### 5. State lean data
 
-`data/state_lean.csv` contains structural partisan lean information for each state, based on historical voting patterns. This provides a baseline expectation that is blended with polling data — and serves as the sole basis for unpolled races (see the lean-only fallback below).
+`state_lean.csv` contains structural partisan lean information for each state, based on historical voting patterns. This provides a baseline expectation that is blended with polling data — and serves as the sole basis for unpolled races (see the lean-only fallback below).
 
 ### 6. District boundaries (House map only)
 
@@ -129,7 +129,7 @@ Creates `db/elections.db` with all tables. Idempotent and migration-aware: re-ru
 python senate_ingest.py
 ```
 
-Clears old Senate poll data and reloads from `data/senate.csv`. Also loads nominees from `data/senate_nominees.csv` and state lean from `data/state_lean.csv`.
+Clears old Senate poll data and reloads from `data/senate.csv`. Also loads nominees from `senate_nominees.csv` and state lean from `state_lean.csv`.
 
 Three safeguards run automatically during ingestion:
 
@@ -143,7 +143,7 @@ Three safeguards run automatically during ingestion:
 python house_ingest.py
 ```
 
-Wipes and reloads only the 2026 **House** rows (`district != ''` — the Senate wipe owns `district = ''`, so the two ingests can never touch each other's data). Reuses the Senate ingest's pollster/race/candidate upserts and question-block dedup, keyed on `data/house_nominees.csv`. The run summary lists skipped nominee rows, polled districts missing from the roster, and rostered districts with no polls yet.
+Wipes and reloads only the 2026 **House** rows (`district != ''` — the Senate wipe owns `district = ''`, so the two ingests can never touch each other's data). Reuses the Senate ingest's pollster/race/candidate upserts and question-block dedup, keyed on `house_nominees.csv`. The run summary lists skipped nominee rows, polled districts missing from the roster, and rostered districts with no polls yet.
 
 ### Step 3 — Apply pollster ratings
 
@@ -151,7 +151,7 @@ Wipes and reloads only the 2026 **House** rows (`district != ''` — the Senate 
 python load_pollster_ratings.py
 ```
 
-Updates `pollsters.credibility` and adds a letter `grade` from `data/pollster_ratings.csv` (sourced from FiveThirtyEight's archived 2023 pollster ratings). Unmatched pollsters default to a neutral 1.0 ("unknown = unproven"). Safe to run before or after either ingest — the ingests never overwrite rating data.
+Updates `pollsters.credibility` and adds a letter `grade` from `pollster_ratings.csv` (sourced from FiveThirtyEight's archived 2023 pollster ratings). Unmatched pollsters default to a neutral 1.0 ("unknown = unproven"). Safe to run before or after either ingest — the ingests never overwrite rating data.
 
 ### Step 4 — Fetch economic indicators + approval
 
@@ -249,7 +249,7 @@ Rebuilds what the model would have projected on the eve of the 2018 and 2020 Sen
 
 The correctness pivot is the `as_of` date now threaded through `days_ago` → `recency_weight` → `weighted_average_and_stderr` (`None` = today, so live behavior is unchanged). Without it a 2018 poll would be measured as ~8 years stale, its recency weight would round to zero, every historical race would silently collapse to structural lean, and the backtest would be scoring the *lean* model while looking fine.
 
-**Result: `LEAN_ALPHA` is 0.78** (re-measured 2026-08-25, moved from 0.82). Minimizing raw RMSE prefers 0.65 — but that gain is two unrelated biases cancelling, not accuracy: the poll leg runs +3.9 toward D (the 2020 polling miss) and the lean leg −3.8 toward R (`state_lean.csv` is ~2024-vintage and 8.8 points too Republican for 2018). Remove each mix's mean error and the variance-optimal weight — the question a blend weight actually answers — is **0.79, plateau 0.70–0.88**, which contains 0.78 at 0.01 off the minimum. The per-cycle optima flatly disagree (2018 wants 0.86, 2020 wants 0.28), so the pooled figure is a compromise between two years rather than a measurement. Correcting national bias is `SIGMA_NATIONAL_MARGIN`'s job, not the blend weight's.
+**Result: `LEAN_ALPHA` is 0.788** (re-measured 2026-08-25, walked from 0.82 via 0.78). Minimizing raw RMSE prefers 0.65 — but that gain is two unrelated biases cancelling, not accuracy: the poll leg runs +3.9 toward D (the 2020 polling miss) and the lean leg −3.8 toward R (`state_lean.csv` is ~2024-vintage and 8.8 points too Republican for 2018). Remove each mix's mean error and the variance-optimal weight — the question a blend weight actually answers — is **0.79, plateau 0.70–0.88**, which 0.788 sits on to three decimals. The per-cycle optima flatly disagree (2018 wants 0.86, 2020 wants 0.28), so the pooled figure is a compromise between two years rather than a measurement. Correcting national bias is `SIGMA_NATIONAL_MARGIN`'s job, not the blend weight's.
 
 ⚠️ **Two cycles, not four.** 538 shut down in 2025 and its polls-page CSVs now return the ABC News HTML shell with a `200` status — a naive downloader saves 314 KB of markup as `.csv`. 2018 and 2020 come from the git-scraped mirror `simonw/fivethirtyeight-polls` (last commit 2021-04-05); 2022 and 2024 Senate polling is not in any mirror found. Sixty races is a usable sample for a per-race blend weight and a useless one for per-cycle error, so this run does **not** license changing `SIGMA_NATIONAL_MARGIN`. Full method, limits, and open items in `BACKTEST_SCOPE.md` §7.
 
@@ -313,7 +313,7 @@ The weighted average is: `Σ(pct × credibility × decay) / Σ(credibility × de
 
 ### 3. Poll-lean blend
 
-The model blends the state lean with the poll average using `LEAN_ALPHA` (0.78 — backtested, see Step 6c; `senate_model.py` is the source of truth):
+The model blends the state lean with the poll average using `LEAN_ALPHA` (0.788 — backtested, see Step 6c; `senate_model.py` is the source of truth):
 
 ```
 base_projection = (LEAN_ALPHA × poll_avg) + ((1 - LEAN_ALPHA) × state_lean)
@@ -426,7 +426,7 @@ Recency decay rate. Currently `0.0231` (half-life ~30 days). Higher = older poll
 
 `senate_model.py`
 
-Blend between polls (0.78) and structural lean (0.22). Higher = more weight to polls.
+Blend between polls (0.788) and structural lean (0.212). Higher = more weight to polls.
 
 `ECON_WEIGHT`
 
@@ -520,13 +520,13 @@ Simulations per chunk. Memory knob; changing it changes the random stream, so it
 
 Pollster grades
 
-`data/pollster_ratings.csv`
+`pollster_ratings.csv`
 
 Letter grade + credibility per pollster; applied by `load_pollster_ratings.py`.
 
 State lean values
 
-`data/state_lean.csv`
+`state_lean.csv`
 
 Baseline partisan expectations for each state.
 
@@ -568,8 +568,8 @@ The Monte Carlo layer supplements this single-outcome projection with a full sea
 -   **Presidential approval:** NYT approval polling CSV (`data/president.csv`)
 -   **Pollster ratings:** FiveThirtyEight's archived 2023 pollster ratings (github.com/fivethirtyeight/data), joined on Pollster Rating ID
 -   **Economic indicators:** Federal Reserve Bank of St. Louis — FRED API
--   **Nominees:** Manually maintained `data/senate_nominees.csv` and `data/house_nominees.csv`
--   **State lean:** Manually maintained `data/state_lean.csv`
+-   **Nominees:** Manually maintained `senate_nominees.csv` and `house_nominees.csv`
+-   **State lean:** Manually maintained `state_lean.csv`
 -   **District lean:** FiveThirtyEight partisan-lean districts file (github.com/fivethirtyeight/data), 2022 vintage on 2022 maps, plus hand overrides — see `fetch_district_lean.py`
 -   **Historical results:** MEDSL precinct-level 2024 data and summary-format 2018/2020/2022 results (`data/*-senate-state.csv`), loaded via `load_historical.py`
 
@@ -606,7 +606,7 @@ The SQLite database (`db/elections.db`) contains the following tables:
 -   District lean on post-redistricting maps: replace the 95 stale TX/NC/OH/FL rows via `data/district_lean_overrides.csv` (every `fetch_district_lean.py` run lists them)
 -   **Measured** generic ballot for the House — the `GENERIC_BALLOT_D` slot exists and `national_environment_margin()` prefers it automatically; nothing populates it yet, so the environment is inferred from approval (±2.6pp regression residual, n=8). Needs a live feed; 538's `polls-page` CSVs now return HTML
 -   Incumbency term for the House, so the national environment isn't applied as pure uniform swing over a presidential lean
--   Senate poll-weight review — **done 2026-08-10, re-measured 2026-08-25; `LEAN_ALPHA` is 0.78.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: 0.78 is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
+-   Senate poll-weight review — **done 2026-08-10, re-measured 2026-08-25; `LEAN_ALPHA` is 0.788.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: 0.788 is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
 -   **Incumbency and house-effect terms for the Senate** — the backtest's worst single miss is 2020 ME: predicted D+5.0, actual R+9.1, a 14-point miss against a four-term incumbent. That is the shape of error an incumbency term catches and a blend weight cannot
 -   Backtested House error σ values to replace the reasoned ones in `calibration.py` — the single biggest source of doubt in `monte_carlo_house.py`
 -   Incumbent party for all 435 districts, so flip detection stops being limited to the ~83 rostered ones

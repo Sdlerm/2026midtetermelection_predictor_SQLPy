@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from init_db import get_connection
 
-_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
+_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "senate_nominees.csv")
 
 # ---------------------------------------------------------------------------
 # Helpers

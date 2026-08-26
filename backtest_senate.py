@@ -26,7 +26,7 @@ model uses, which is what makes the sweep a statement about the model rather
 than about a reimplementation of it: poll_margin comes from
 senate_model.weighted_average_and_stderr (credibility x recency decay, per-race
 F-grade exclusion) evaluated with as_of = election day, and lean_margin comes
-from senate_model.lean_baseline reading the same data/state_lean.csv.
+from senate_model.lean_baseline reading the same state_lean.csv.
 
 WHAT IS DELIBERATELY LEFT OUT
 -----------------------------
@@ -47,7 +47,7 @@ THREE HONEST LIMITS — read before quoting any number here
    blend weight and a useless one for per-cycle error (n=2).
 
 2. THE LEAN LEG IS FLATTERED BY LOOKAHEAD, and this cuts directly at the
-   question. data/state_lean.csv is a single undated snapshot in the working
+   question. state_lean.csv is a single undated snapshot in the working
    tree today; whatever elections it was built from, they include the ones being
    predicted here. A lean that already knows 2018 and 2020 outcomes performs
    better in this backtest than a genuine 2018-vintage lean would have, which
@@ -173,7 +173,7 @@ class flattened_credibility:
     path re-reads the table and raises if the checksum does not match what went
     in, so a failed restore can never masquerade as a working database. If that
     ever fires, `python load_pollster_ratings.py` rebuilds the graded rows from
-    data/pollster_ratings.csv.
+    pollster_ratings.csv.
     """
 
     def __init__(self, active=True):
@@ -338,7 +338,7 @@ def bootstrap_best_alpha(observations, n_boot=2000, seed=20260810):
 
 def lean_vintage_check():
     """
-    How well data/state_lean.csv predicts each cycle's actual margins.
+    How well state_lean.csv predicts each cycle's actual margins.
 
     This is not a side note, it decides how the sweep can be read. The file is a
     single undated snapshot, so the only way to learn what era it describes is to

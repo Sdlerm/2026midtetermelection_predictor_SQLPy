@@ -95,7 +95,7 @@ STALE_DAYS = 548
 
 
 # Fallback credibility per letter grade, on the SAME scale as
-# data/pollster_ratings.csv: a uniform 0.2 step from A+ = 3.0 down to F = 0.2,
+# pollster_ratings.csv: a uniform 0.2 step from A+ = 3.0 down to F = 0.2,
 # with each compound grade sitting in the slot between its two letters
 # (A/B between A- and B+, and so on).
 #
@@ -128,7 +128,7 @@ GRADE_LADDER = {
 
 def grade_to_credibility():
     """
-    {letter grade: numeric credibility}, taken from data/pollster_ratings.csv so
+    {letter grade: numeric credibility}, taken from pollster_ratings.csv so
     the historical rows sit on exactly the same scale as the live ones, with
     GRADE_LADDER filling grades that file happens not to contain.
 
@@ -144,7 +144,7 @@ def grade_to_credibility():
     ladder = dict(GRADE_LADDER)
 
     drifted = []
-    ratings = os.path.join(os.path.dirname(__file__), "data", "pollster_ratings.csv")
+    ratings = os.path.join(os.path.dirname(__file__), "pollster_ratings.csv")
     if os.path.exists(ratings):
         with open(ratings, newline="") as f:
             for row in csv.DictReader(f):
@@ -169,7 +169,7 @@ def register_pollsters(cur, path):
     Add the 538 file's pollsters to the pollsters table, with their fte_grade.
 
     INSERT ONLY — never UPDATE. An existing row's grade and credibility come
-    from data/pollster_ratings.csv and drive the LIVE 2026 forecast; overwriting
+    from pollster_ratings.csv and drive the LIVE 2026 forecast; overwriting
     them with the mirror's 2021-vintage grade would quietly re-weight every
     current race as a side effect of setting up a backtest. A name that is
     already present is therefore left exactly as it is.

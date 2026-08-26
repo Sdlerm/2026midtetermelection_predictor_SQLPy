@@ -8,20 +8,20 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LEAN_ALPHA = 0.78
-# Poll weight in the blend; the structural lean gets the remaining 0.22.
+LEAN_ALPHA = 0.788
+# Poll weight in the blend; the structural lean gets the remaining 0.212.
 # (The comment here read "= 0.2" until 2026-08-10 — stale from when the constant
-# was 0.80, and "= 0.18" until 2026-08-25. house_model.LEAN_ALPHA_HOUSE is a
-# separate, deliberately unmatched 0.80: see the note there for why it is not
-# tracked to this one.)
+# was 0.80, then "= 0.18", then "= 0.22", both on 2026-08-25.
+# house_model.LEAN_ALPHA_HOUSE is a separate, deliberately unmatched 0.80: see
+# the note there for why it is not tracked to this one.)
 #
 # BACKTESTED 2026-08-10, re-measured 2026-08-25 against 2018 + 2020 (59 races)
-# — run backtest_senate.py. Moved 0.82 -> 0.78 on 2026-08-25; the figures below
-# are the re-run at 0.78, which the measurement endorses slightly more strongly
-# than it did 0.82 (0.01 off the variance-optimal minimum, against 0.02).
-# VERDICT: KEEP 0.78. Not because it won, but because the thing that beats it
+# — run backtest_senate.py. Walked 0.82 -> 0.78 -> 0.788 on 2026-08-25; the
+# figures below are the re-run at 0.788, which lands on the variance-optimal
+# minimum to three decimals (0.82 sat 0.02 off it, 0.78 sat 0.01 off).
+# VERDICT: KEEP 0.788. Not because it won, but because the thing that beats it
 # wins for the wrong reason:
-#   * Minimizing raw RMSE prefers alpha 0.65 (RMSE 5.80 vs 5.98 at 0.78).
+#   * Minimizing raw RMSE prefers alpha 0.65 (RMSE 5.80 vs 6.00 at 0.788).
 #   * But that gain is BIAS CANCELLATION, not accuracy. Over these two cycles
 #     the poll leg is +3.9 D-biased (the 2020 polling miss) and the lean leg is
 #     -3.8 R-biased (state_lean.csv is a ~2024-vintage file, 8.8 points too R
@@ -29,21 +29,24 @@ LEAN_ALPHA = 0.78
 #     alpha 0.5-0.65. Tuning the blend weight to exploit that is fitting noise.
 #   * Remove each mix's mean error and ask which has the least SCATTER — the
 #     question a blend weight actually answers — and the optimum is alpha 0.79,
-#     plateau 0.70-0.88. 0.78 sits inside it, 0.01 off the minimum.
+#     plateau 0.70-0.88. 0.788 is that minimum (debiased RMSE 5.54, gap 0.000).
 #   * The per-cycle optima disagree completely: 2018 wants 0.86, 2020 wants
 #     0.28. There is no single alpha both cycles endorse, so the pooled 0.65 is
 #     a compromise between two years, not a property of polling.
 #   * Race-level bootstrap (n=2000) puts the raw optimum at 0.65, 90% interval
-#     0.49-0.77, so P(optimum >= 0.78) = 4%. That interval is measured on the
+#     0.49-0.77, so P(optimum >= 0.788) = 3%. That interval is measured on the
 #     raw-RMSE criterion this block rejects, and the lean leg's lookahead
-#     pushes it down further; it is not evidence against 0.78.
+#     pushes it down further; it is not evidence against 0.788.
+#   * Three decimals is finer than this backtest can resolve — the sweep grid is
+#     0.01 and the debiased plateau spans 0.70-0.88. 0.788 is not measurably
+#     better than 0.79; it is just not worse.
 # National bias is what SIGMA_NATIONAL_MARGIN and the econ/approval terms are
 # for. Absorbing it into the blend weight would use the wrong knob and would
-# have made 2018 worse (RMSE 3.81 -> 4.61) to make 2020 better.
+# have made 2018 worse (RMSE 3.78 -> 4.61) to make 2020 better.
 LEAN_ALPHA_BACKTEST_NOTE = "2018+2020, n=59; variance-optimal 0.79 (0.70-0.88)"
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.26    # how much economics nudges the poll average; tune this
-APPROVAL_WEIGHT = 0.1
+APPROVAL_WEIGHT = 0.11
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
@@ -57,8 +60,8 @@ TOSSUP_THRESHOLD_PP = 1.2 #if the finalists shares are w/i 1.2pp, flag as "toss-
 MIN_TWO_WAY_POLL_SUM = 60.0
 
 
-NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "data", "senate_nominees.csv")
-STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "state_lean.csv")
+NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "senate_nominees.csv")
+STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "state_lean.csv")
 
 # States with a 2026 Senate race: 33 regular Class 2 seats + FL/OH special elections
 STATES_WITH_2026_RACES = [
