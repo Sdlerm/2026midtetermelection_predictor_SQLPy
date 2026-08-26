@@ -123,30 +123,31 @@ to deal with this first; it is a bigger problem than the pollster grades.
 
 ### The finding
 
-`LEAN_ALPHA` **stays at 0.82.** Full reasoning is in the comment above the
-constant in `senate_model.py`; the short version:
+`LEAN_ALPHA` **is 0.78** (re-measured 2026-08-25, moved from 0.82). Full
+reasoning is in the comment above the constant in `senate_model.py`; the short
+version:
 
-| Criterion | Optimal alpha | At 0.82 |
+| Criterion | Optimal alpha | At 0.78 (current vs best) |
 |---|---|---|
-| RMSE | 0.65 (plateau 0.59–0.72) | 6.10 vs 5.76 |
-| MAE | 0.62 | 4.67 vs 4.35 |
-| **RMSE, mean error removed** | **0.77 (plateau 0.68–0.85)** | **5.57 vs 5.55** |
-| 2018 alone | 0.84 | — |
+| RMSE | 0.65 (plateau 0.59–0.72) | 5.98 vs 5.80 |
+| MAE | 0.64 | 4.58 vs 4.41 |
+| **RMSE, mean error removed** | **0.79 (plateau 0.70–0.88)** | **5.54 vs 5.54 (+0.001)** |
+| 2018 alone | 0.86 | — |
 | 2020 alone | 0.28 | — |
 
 Raw RMSE prefers a low alpha only because the poll leg (+3.9 D, the 2020 miss)
 and the lean leg (−3.8 R, the stale-vintage artifact above) have opposite biases
 that cancel near 0.5–0.65. Strip the mean error and the variance-optimal alpha is
-0.77, whose plateau contains 0.82. The per-cycle optima — 0.84 versus 0.28 — do
-not agree that any single alpha is right, so the pooled 0.65 is a compromise
-between two years rather than a measurement.
+0.79, whose plateau contains 0.78 at 0.01 off the minimum. The per-cycle optima —
+0.86 versus 0.28 — do not agree that any single alpha is right, so the pooled
+0.65 is a compromise between two years rather than a measurement.
 
 ### What is still open
 
-- **`SIGMA_TOTAL_MARGIN`.** Residual SD at alpha 0.82 is **5.62** against the
+- **`SIGMA_TOTAL_MARGIN`.** Residual SD at alpha 0.78 is **5.59** against the
   constant's 5.2, i.e. the model is mildly overconfident. But per-cycle it is
-  3.69 (2018) and 7.65 (2020) — the two cycles bracket 5.2 rather than agreeing
-  on 5.62, so this is a two-observation average, not a measurement. Leave 5.2
+  3.81 (2018) and 7.41 (2020) — the two cycles bracket 5.2 rather than agreeing
+  on 5.59, so this is a two-observation average, not a measurement. Leave 5.2
   sourced from the literature until more cycles exist.
 - **`SIGMA_NATIONAL_MARGIN` remains untouchable at n=2**, exactly as §5 argued.
 - **`ECON_WEIGHT` / `APPROVAL_WEIGHT`** still unbacktested; needs the §4 Step 2

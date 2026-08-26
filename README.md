@@ -249,7 +249,7 @@ Rebuilds what the model would have projected on the eve of the 2018 and 2020 Sen
 
 The correctness pivot is the `as_of` date now threaded through `days_ago` → `recency_weight` → `weighted_average_and_stderr` (`None` = today, so live behavior is unchanged). Without it a 2018 poll would be measured as ~8 years stale, its recency weight would round to zero, every historical race would silently collapse to structural lean, and the backtest would be scoring the *lean* model while looking fine.
 
-**Result: `LEAN_ALPHA` stays at 0.82.** Minimizing raw RMSE prefers 0.65 — but that gain is two unrelated biases cancelling, not accuracy: the poll leg runs +3.9 toward D (the 2020 polling miss) and the lean leg −3.8 toward R (`state_lean.csv` is ~2024-vintage and 8.8 points too Republican for 2018). Remove each mix's mean error and the variance-optimal weight — the question a blend weight actually answers — is **0.77, plateau 0.68–0.85**, which contains 0.82. The per-cycle optima flatly disagree (2018 wants 0.84, 2020 wants 0.28), so the pooled figure is a compromise between two years rather than a measurement. Correcting national bias is `SIGMA_NATIONAL_MARGIN`'s job, not the blend weight's.
+**Result: `LEAN_ALPHA` is 0.78** (re-measured 2026-08-25, moved from 0.82). Minimizing raw RMSE prefers 0.65 — but that gain is two unrelated biases cancelling, not accuracy: the poll leg runs +3.9 toward D (the 2020 polling miss) and the lean leg −3.8 toward R (`state_lean.csv` is ~2024-vintage and 8.8 points too Republican for 2018). Remove each mix's mean error and the variance-optimal weight — the question a blend weight actually answers — is **0.79, plateau 0.70–0.88**, which contains 0.78 at 0.01 off the minimum. The per-cycle optima flatly disagree (2018 wants 0.86, 2020 wants 0.28), so the pooled figure is a compromise between two years rather than a measurement. Correcting national bias is `SIGMA_NATIONAL_MARGIN`'s job, not the blend weight's.
 
 ⚠️ **Two cycles, not four.** 538 shut down in 2025 and its polls-page CSVs now return the ABC News HTML shell with a `200` status — a naive downloader saves 314 KB of markup as `.csv`. 2018 and 2020 come from the git-scraped mirror `simonw/fivethirtyeight-polls` (last commit 2021-04-05); 2022 and 2024 Senate polling is not in any mirror found. Sixty races is a usable sample for a per-race blend weight and a useless one for per-cycle error, so this run does **not** license changing `SIGMA_NATIONAL_MARGIN`. Full method, limits, and open items in `BACKTEST_SCOPE.md` §7.
 
@@ -313,7 +313,7 @@ The weighted average is: `Σ(pct × credibility × decay) / Σ(credibility × de
 
 ### 3. Poll-lean blend
 
-The model blends the state lean with the poll average using `LEAN_ALPHA` (currently 0.8):
+The model blends the state lean with the poll average using `LEAN_ALPHA` (0.78 — backtested, see Step 6c; `senate_model.py` is the source of truth):
 
 ```
 base_projection = (LEAN_ALPHA × poll_avg) + ((1 - LEAN_ALPHA) × state_lean)
@@ -426,7 +426,7 @@ Recency decay rate. Currently `0.0231` (half-life ~30 days). Higher = older poll
 
 `senate_model.py`
 
-Blend between polls (0.8) and structural lean (0.2). Higher = more weight to polls.
+Blend between polls (0.78) and structural lean (0.22). Higher = more weight to polls.
 
 `ECON_WEIGHT`
 
@@ -480,7 +480,7 @@ Margin bins for race ratings: Tilt < 5, Lean < 10, Likely < 15, Safe beyond. Eve
 
 `house_model.py`
 
-Poll/lean blend for House races. 0.80 — 80% poll, 20% district lean, matching `LEAN_ALPHA`.
+Poll/lean blend for House races. 0.80 — 80% poll, 20% district lean. Deliberately *not* matched to `LEAN_ALPHA`: that one has been backtested and moved, this one is unbacktested and stays put until district lean vintages exist. See `house_model.py`.
 
 `MIDTERM_APPROVAL_HISTORY`
 
@@ -606,7 +606,7 @@ The SQLite database (`db/elections.db`) contains the following tables:
 -   District lean on post-redistricting maps: replace the 95 stale TX/NC/OH/FL rows via `data/district_lean_overrides.csv` (every `fetch_district_lean.py` run lists them)
 -   **Measured** generic ballot for the House — the `GENERIC_BALLOT_D` slot exists and `national_environment_margin()` prefers it automatically; nothing populates it yet, so the environment is inferred from approval (±2.6pp regression residual, n=8). Needs a live feed; 538's `polls-page` CSVs now return HTML
 -   Incumbency term for the House, so the national environment isn't applied as pure uniform swing over a presidential lean
--   Senate poll-weight review — **done 2026-08-10; `LEAN_ALPHA` stays at 0.82.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: 0.82 is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
+-   Senate poll-weight review — **done 2026-08-10, re-measured 2026-08-25; `LEAN_ALPHA` is 0.78.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: 0.78 is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
 -   **Incumbency and house-effect terms for the Senate** — the backtest's worst single miss is 2020 ME: predicted D+5.0, actual R+9.1, a 14-point miss against a four-term incumbent. That is the shape of error an incumbency term catches and a blend weight cannot
 -   Backtested House error σ values to replace the reasoned ones in `calibration.py` — the single biggest source of doubt in `monte_carlo_house.py`
 -   Incumbent party for all 435 districts, so flip detection stops being limited to the ~83 rostered ones

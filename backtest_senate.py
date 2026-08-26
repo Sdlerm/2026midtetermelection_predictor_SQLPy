@@ -3,11 +3,16 @@ backtest_senate.py — measure the poll/lean blend weight against real outcomes.
 
 THE QUESTION
 ------------
-senate_model.LEAN_ALPHA = 0.80 says "trust the weighted poll average 80%, trust
-the structural lean 20%." That number was chosen, not measured. This script
+senate_model.LEAN_ALPHA says "trust the weighted poll average this much, trust
+the structural lean the rest." That number was chosen, not measured. This script
 rebuilds what the model would have projected on the eve of the 2018 and 2020
 Senate elections, sweeps alpha from 0 to 1, and reports which value minimizes
 error against what actually happened.
+
+The current setting is deliberately NOT written out here. This paragraph read
+"= 0.80" while the constant was 0.82, and then 0.78 — restating it is what makes
+it stale. Every run imports the live value and prints it on the CURRENT line and
+in the per-cycle rows, so the output is always about the setting in force.
 
 WHAT IS BEING SCORED
 --------------------
@@ -48,9 +53,10 @@ THREE HONEST LIMITS — read before quoting any number here
    better in this backtest than a genuine 2018-vintage lean would have, which
    pushes the measured optimum DOWNWARD (toward the lean). So the alpha reported
    below is a LOWER BOUND on the alpha that would have been right at the time.
-   That asymmetry is usable: if the optimum lands at or above 0.80, the
-   conclusion "0.80 is not too high" survives the bias. If it lands below, the
-   result is confounded and cannot settle the question on its own.
+   That asymmetry is usable: if the optimum lands at or above the current
+   LEAN_ALPHA, the conclusion "the current setting is not too high" survives the
+   bias. If it lands below, the result is confounded and cannot settle the
+   question on its own.
 
 3. POLLSTER GRADES LEAK TOO, in the other direction. The grades attached to
    historical rows are the mirror's April 2021 vintage, so they encode 2018 and

@@ -8,32 +8,39 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LEAN_ALPHA = 0.82
-# Poll weight in the blend; the structural lean gets the remaining 0.18.
+LEAN_ALPHA = 0.78
+# Poll weight in the blend; the structural lean gets the remaining 0.22.
 # (The comment here read "= 0.2" until 2026-08-10 — stale from when the constant
-# was 0.80. house_model.LEAN_ALPHA_HOUSE is still 0.80 and its comment claims to
-# match this one; it no longer does, and that 0.02 is now a deliberate
-# difference rather than a typo, because only this value has been backtested.)
+# was 0.80, and "= 0.18" until 2026-08-25. house_model.LEAN_ALPHA_HOUSE is a
+# separate, deliberately unmatched 0.80: see the note there for why it is not
+# tracked to this one.)
 #
-# BACKTESTED 2026-08-10 against 2018 + 2020 (59 races) — run backtest_senate.py.
-# VERDICT: KEEP 0.82. Not because it won, but because the thing that beats it
+# BACKTESTED 2026-08-10, re-measured 2026-08-25 against 2018 + 2020 (59 races)
+# — run backtest_senate.py. Moved 0.82 -> 0.78 on 2026-08-25; the figures below
+# are the re-run at 0.78, which the measurement endorses slightly more strongly
+# than it did 0.82 (0.01 off the variance-optimal minimum, against 0.02).
+# VERDICT: KEEP 0.78. Not because it won, but because the thing that beats it
 # wins for the wrong reason:
-#   * Minimizing raw RMSE prefers alpha 0.65 (RMSE 5.76 vs 6.10 at 0.82).
+#   * Minimizing raw RMSE prefers alpha 0.65 (RMSE 5.80 vs 5.98 at 0.78).
 #   * But that gain is BIAS CANCELLATION, not accuracy. Over these two cycles
 #     the poll leg is +3.9 D-biased (the 2020 polling miss) and the lean leg is
 #     -3.8 R-biased (state_lean.csv is a ~2024-vintage file, 8.8 points too R
 #     for 2018). Two unrelated errors with opposite signs happen to cancel near
 #     alpha 0.5-0.65. Tuning the blend weight to exploit that is fitting noise.
 #   * Remove each mix's mean error and ask which has the least SCATTER — the
-#     question a blend weight actually answers — and the optimum is alpha 0.77,
-#     plateau 0.68-0.85. 0.82 sits inside it, 0.02 off the minimum.
-#   * The per-cycle optima disagree completely: 2018 wants 0.84, 2020 wants
+#     question a blend weight actually answers — and the optimum is alpha 0.79,
+#     plateau 0.70-0.88. 0.78 sits inside it, 0.01 off the minimum.
+#   * The per-cycle optima disagree completely: 2018 wants 0.86, 2020 wants
 #     0.28. There is no single alpha both cycles endorse, so the pooled 0.65 is
 #     a compromise between two years, not a property of polling.
+#   * Race-level bootstrap (n=2000) puts the raw optimum at 0.65, 90% interval
+#     0.49-0.77, so P(optimum >= 0.78) = 4%. That interval is measured on the
+#     raw-RMSE criterion this block rejects, and the lean leg's lookahead
+#     pushes it down further; it is not evidence against 0.78.
 # National bias is what SIGMA_NATIONAL_MARGIN and the econ/approval terms are
 # for. Absorbing it into the blend weight would use the wrong knob and would
-# have made 2018 worse (RMSE 3.69 -> 4.54) to make 2020 better.
-LEAN_ALPHA_BACKTEST_NOTE = "2018+2020, n=59; variance-optimal 0.77 (0.68-0.85)"
+# have made 2018 worse (RMSE 3.81 -> 4.61) to make 2020 better.
+LEAN_ALPHA_BACKTEST_NOTE = "2018+2020, n=59; variance-optimal 0.79 (0.70-0.88)"
 LAMBDA = 0.0231      # recency decay — half-life ~30 days
 ECON_WEIGHT = 0.26    # how much economics nudges the poll average; tune this
 APPROVAL_WEIGHT = 0.1

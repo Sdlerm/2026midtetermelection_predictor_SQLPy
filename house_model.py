@@ -85,8 +85,11 @@ from senate_model import (
 from house_ingest import load_house_nominees, _pad
 
 LEAN_ALPHA_HOUSE = 0.80   # (1-alpha) = 0.20 is the lean weight
-# Was documented as "matches senate_model.LEAN_ALPHA" — it does not: that value
-# is 0.82. Left at 0.80 because it is UNBACKTESTED and copying the Senate's
+# Was documented as "matches senate_model.LEAN_ALPHA" — it does not, and the gap
+# is not a fixed one: that constant has been backtested and moved twice
+# (0.80 -> 0.82 -> 0.78) while this one stayed put, so pinning its current value
+# here just starts the same comment rotting again. Read it from senate_model.
+# Left at 0.80 because it is UNBACKTESTED and copying the Senate's
 # figure would import a number measured on statewide polls into district polls,
 # which are sparser and more often partisan-sponsored. See backtest_senate.py
 # for the Senate result and why a House equivalent needs historical district

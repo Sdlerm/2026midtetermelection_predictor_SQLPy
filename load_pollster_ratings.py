@@ -4,18 +4,20 @@ import pandas as pd
 from init_db import get_connection
 
 # Grades sourced from FiveThirtyEight's archived 2023 pollster ratings
-# (github.com/fivethirtyeight/data, pollster-ratings/2023), joined on
-# Pollster Rating ID. Letter -> numeric mapping defined at generation time;
+# (github.com/fivethirtyeight/data, pollster-ratings/2023), joined on that
+# file's Pollster Rating ID. The ID itself was dropped from this CSV on
+# 2026-08-25: nothing ever read it, and the hand-added rows had started
+# carrying invented IDs that collided with real ones.
+# Letter -> numeric mapping defined at generation time;
 # only the RATIOS between values affect the weighted average.
 # Unmatched pollsters default to C/D = 1.0 (unknown = unproven).
-# F pollsters keep numeric 0.3 but are excluded per-race in senate_model.py
-# unless they are the only polling available for that race.
+# F pollsters keep a small nonzero numeric but are excluded per-race in
+# senate_model.py unless they are the only polling available for that race.
 RATINGS_PATH = os.path.join(os.path.dirname(__file__), "data", "pollster_ratings.csv")
 
 EXPECTED_COLUMNS = [
     "Pollster",
     "Pollster Rating Name",
-    "Pollster Rating ID",
     "grade",
     "numeric_grade",
 ]
@@ -28,11 +30,23 @@ def read_ratings(filepath):
     that says nothing about which pollster is malformed. Hand-edited rows in
     this file are the usual cause (an extra unquoted comma, or a column left
     out), so name the offending line and its content instead.
+
+    Checks the whole file and reports every problem at once — fixing these one
+    crash at a time is what let a hand-edited batch of rows accumulate several
+    distinct faults. Beyond field counts we also reject:
+
+      * a blank Pollster name, which can never match a DB row; and
+      * one letter grade carrying two different numeric_grade values, which
+        looks harmless here but silently corrupts load_historical_polls.py's
+        grade_ladder(): it keys the ladder by letter and takes whichever row
+        it reads last, so historical polls end up on a different scale than
+        the live ones.
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Ratings file not found: {filepath}")
 
-    bad_lines = []
+    problems = []
+    grade_values = {}  # letter grade -> (numeric as written, first line seen)
     with open(filepath, newline="", encoding="utf-8") as fh:
         reader = csv.reader(fh)
         header = next(reader, None)
@@ -40,16 +54,31 @@ def read_ratings(filepath):
             raise ValueError(
                 f"{filepath} header is {header}, expected {EXPECTED_COLUMNS}"
             )
-        for lineno, row in enumerate(reader, start=2):
+        for row in reader:
+            # reader.line_num, not an enumerate() counter: a quoted field may
+            # span physical lines, and a line number that points at the wrong
+            # row is worse than none at all.
+            lineno = reader.line_num
             if len(row) != len(EXPECTED_COLUMNS):
-                bad_lines.append((lineno, len(row), ",".join(row)))
+                problems.append(
+                    f"  line {lineno}: {len(row)} fields "
+                    f"(expected {len(EXPECTED_COLUMNS)}): {','.join(row)}"
+                )
+                continue
 
-    if bad_lines:
-        detail = "\n".join(
-            f"  line {n}: {count} fields (expected {len(EXPECTED_COLUMNS)}): {text}"
-            for n, count, text in bad_lines
-        )
-        raise ValueError(f"Malformed rows in {filepath}:\n{detail}")
+            pollster, _rating_name, grade, numeric = (c.strip() for c in row)
+            if not pollster:
+                problems.append(f"  line {lineno}: blank Pollster name: {','.join(row)}")
+            if grade and numeric:
+                seen = grade_values.setdefault(grade, (numeric, lineno))
+                if seen[0] != numeric:
+                    problems.append(
+                        f"  line {lineno}: grade {grade!r} = {numeric}, but "
+                        f"line {seen[1]} has {grade!r} = {seen[0]}"
+                    )
+
+    if problems:
+        raise ValueError(f"Malformed rows in {filepath}:\n" + "\n".join(problems))
 
     return pd.read_csv(filepath)
 
@@ -61,6 +90,13 @@ def ensure_grade_column(cur):
     run repeatedly (ALTER TABLE would error on a duplicate column).
     """
     cols = [row[1] for row in cur.execute("PRAGMA table_info(pollsters)")]
+    if not cols:
+        # PRAGMA on a missing table returns no rows rather than raising, so
+        # without this the ALTER below fails with an opaque sqlite error.
+        raise RuntimeError(
+            "pollsters table does not exist — run init_db.py and an ingest "
+            "(senate_ingest.py / house_ingest.py) before loading ratings."
+        )
     if "grade" not in cols:
         cur.execute("ALTER TABLE pollsters ADD COLUMN grade TEXT")
         print("Added 'grade' column to pollsters table.")
@@ -85,32 +121,39 @@ def load_pollster_ratings(filepath=RATINGS_PATH):
               + ", ".join(sorted(set(df.loc[dupes, "Pollster"].str.strip()))))
 
     con = get_connection()
-    cur = con.cursor()
-    ensure_grade_column(cur)
+    try:
+        cur = con.cursor()
+        ensure_grade_column(cur)
 
-    updated, unmatched, skipped = 0, [], []
-    for _, row in df.iterrows():
-        name = str(row["Pollster"]).strip()
-        # A blank grade would otherwise be written as NaN credibility, which
-        # silently poisons every weighted average that pollster appears in.
-        if pd.isna(row["numeric_grade"]) or pd.isna(row["grade"]):
-            skipped.append(name)
-            continue
-        cur.execute(
-            "UPDATE pollsters SET credibility = ?, grade = ? WHERE name = ?",
-            (float(row["numeric_grade"]), str(row["grade"]).strip(), name),
-        )
-        if cur.rowcount > 0:
-            updated += 1
-        else:
-            # Pollster in ratings file but not in DB — usually means it had
-            # no rows survive ingest filtering (stale, generic-ballot, etc.)
-            unmatched.append(name)
+        # Sets, not counters: a duplicate row for one pollster is two UPDATEs
+        # but one pollster, and reporting it twice overstates the coverage.
+        updated, unmatched, skipped = set(), [], []
+        for _, row in df.iterrows():
+            name = str(row["Pollster"]).strip()
+            # A blank grade would otherwise be written as NaN credibility,
+            # which silently poisons every weighted average that pollster
+            # appears in.
+            if pd.isna(row["numeric_grade"]) or pd.isna(row["grade"]):
+                skipped.append(name)
+                continue
+            cur.execute(
+                "UPDATE pollsters SET credibility = ?, grade = ? WHERE name = ?",
+                (float(row["numeric_grade"]), str(row["grade"]).strip(), name),
+            )
+            if cur.rowcount > 0:
+                updated.add(name)
+            else:
+                # Pollster in ratings file but not in DB — usually means it had
+                # no rows survive ingest filtering (stale, generic-ballot, etc.)
+                unmatched.append(name)
 
-    con.commit()
-    con.close()
+        con.commit()
+    finally:
+        # Without this, a mid-loop failure leaves the DB locked by an open
+        # connection holding a write transaction.
+        con.close()
 
-    print(f"Updated {updated} pollsters with grades and credibility.")
+    print(f"Updated {len(updated)} pollsters with grades and credibility.")
     if skipped:
         print(f"{len(skipped)} rows skipped for missing grade/numeric_grade: "
               + ", ".join(skipped))
