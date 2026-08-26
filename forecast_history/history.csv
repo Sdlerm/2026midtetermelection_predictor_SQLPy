@@ -1,0 +1,4 @@
+run_date,max_poll_date,n_polls,senate_p_dem_control,senate_expected_d_seats,house_p_dem_control,house_expected_d_seats,sigma_total,sigma_national,sigma_total_house_polled,sigma_total_house_lean
+2026-08-02,2026-07-31,607,59.1,51.0,44.5,215.4,5.2,2.5,6.0,11.0
+2026-08-10,2026-08-04,609,56.8,50.9,44.4,215.3,5.2,2.5,6.0,11.0
+2026-08-18,2026-08-17,789,62.5,51.2,88.1,237.0,5.2,2.5,6.0,11.0
