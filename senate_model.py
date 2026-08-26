@@ -474,21 +474,35 @@ def get_approval_score(year=2026):
     normalized = max(0.0, min(1.0, (value - low) / (high - low)))
     return round((normalized - 0.5) * 2 * APPROVAL_DIRECTION, 3)
 
+def national_env_party(party):
+    """
+    Resolves a ballot party label to the side of the national environment the
+    candidate actually runs on. Independents who caucus with a major party are
+    mapped through INDIE_CAUCUS — the same convention lean_baseline() uses, so
+    the structural leg and the national-environment leg treat a candidate like
+    Osborn (NE-I) as one and the same person.
+
+    Returns 'D', 'R', or the original label if it maps to neither.
+    """
+    return INDIE_CAUCUS.get(party, party)
+
+
 def climate_adjustment(party, climate_score):
     """
     Converts a climate score into a percentage point adjustment for a candidate.
-    party: 'D' or 'R'
+    party: 'D' or 'R', or an independent label resolved through INDIE_CAUCUS
     climate_score: float in [-1, +1], positive = favors D
     """
     # Scale: a climate_score of 1.0 = full ECON_WEIGHT adjustment
     # e.g. ECON_WEIGHT=0.18 means max ±1.8 percentage points
     raw = climate_score * ECON_WEIGHT * 10
 
+    party = national_env_party(party)
     if party == "D":
         return round(raw, 2)
     if party == "R":
         return round(-raw, 2)  # inverse for R
-    return 0.0  # independents: no national-environment adjustment (untested assumption either way)
+    return 0.0  # unaligned independents: no national-environment adjustment
 
 def approval_adjustment(party, approval_score):
     """
@@ -498,11 +512,12 @@ def approval_adjustment(party, approval_score):
     the six-indicator climate block.
     """
     raw = approval_score * APPROVAL_WEIGHT * 10
+    party = national_env_party(party)
     if party == "D":
         return round(raw, 2)
     if party == "R":
         return round(-raw, 2)
-    return 0.0  # independents: no national-environment adjustment (matches climate_adjustment)
+    return 0.0  # unaligned independents: no adjustment (matches climate_adjustment)
 
 def load_state_lean():
     """
