@@ -68,50 +68,101 @@ SIGMA_LOCAL_MARGIN = math.sqrt(SIGMA_TOTAL_MARGIN**2 - SIGMA_NATIONAL_MARGIN**2)
 # =====================================================================
 # HOUSE constants (monte_carlo_house.py)
 # =====================================================================
-# READ THIS BEFORE TRUSTING ANY HOUSE OUTPUT.
+# These were REASONED until 2026-08-27. They are now MEASURED, by
+# backtest_house.py, against 2018/2020/2022 — the same standard the Senate
+# sigmas are held to. The superseded block read:
 #
-# The Senate sigmas above are MEASURED — they trace to published pollster-
-# accuracy work. The House sigmas below are REASONED, not measured: they are
-# argued from the Senate numbers by analogy, and no House backtest has been run
-# against them. They are honest starting values, not calibrated ones. Replace
-# them with backtested numbers once load_historical.py covers House results.
-# (Recorded 2026-07-28.)
+#     SIGMA_NATIONAL_MARGIN_HOUSE     = 3.0    (kept, see below)
+#     SIGMA_TOTAL_MARGIN_HOUSE_POLLED = 6.0    (kept, still untested)
+#     SIGMA_TOTAL_MARGIN_HOUSE_LEAN   = 11.0   (replaced by TWO constants)
 #
-# The structural difference from the Senate: only ~36 of 435 districts are
-# polled at all. The other ~399 are projected from district_lean.csv, so their
-# error is not POLLING error — it is the error of using 2022-vintage partisan
-# lean to predict a 2026 race. That is a much larger and differently-shaped
-# quantity, which is why the House needs two total-error constants where the
-# Senate needs one.
+# and carried the note "no House backtest has been run against them ... Replace
+# them with backtested numbers once load_historical.py covers House results."
+# It never did cover them; fetch_house_backtest_data.py does, from 538's pinned
+# lean vintages and the FEC's certified returns. Run:
+#
+#     python fetch_house_backtest_data.py && python backtest_house.py
+#
+# WHAT THE BACKTEST CHANGED, AND WHY IT IS TWO CONSTANTS NOW
+# ----------------------------------------------------------
+# The single 11.0 was standing in for two different failures at once: a lean
+# going stale, and a lean describing a district that has since been redrawn.
+# Measured, they are not the same size and not close:
+#
+#     lean on INTACT lines, same cycle          SD 7.2   (n=1174)
+#     lean on INTACT lines, one cycle stale     SD 7.5   (n=387)
+#     lean on REDRAWN lines, decennial          SD 17.0  (n=1158)
+#     lean on REDRAWN lines, mid-decade (NC'19) SD 22.5  (n=12)
+#
+# Ageing costs about a quarter-point of SD per cycle. Redistricting costs more
+# than the entire intact sigma over again. A single 11.0 was therefore wrong in
+# both directions — too wide for the districts whose lines still stand, far too
+# narrow for the ones redrawn underneath it — and no single value can be right
+# for a map that contains both. Hence the split.
+#
+# All three sigmas are validated, not just estimated: backtest_house.py §4 turns
+# each district into a win probability and checks the realized rate bin by bin.
+# The tails come back honest at these values. The 0.4-0.6 band does not, and §5
+# names the cause — an incumbent runs ~3 points of margin ahead of the lean, and
+# house_model.py has no incumbency term. That is a CENTERING error, not a width
+# error, and widening these sigmas would hide it rather than fix it.
 
 # National (correlated) error — one draw per simulated election, applied to
-# every district. Set slightly above the Senate's 2.5 because a House map is
-# more exposed to a uniform national swing than a set of 35 state races with
-# heavy incumbent-specific variation: the same generic-ballot miss moves all
-# 435 districts together.
+# every district. UNCHANGED at 3.0.
+#
+# The backtest reads 1.94 as the SD of the three per-cycle mean misses, i.e. it
+# says 3.0 is conservative. Three observations cannot move a constant, exactly
+# as BACKTEST_SCOPE.md §5 argued for the Senate at n=4 and §7 confirmed at n=2;
+# and this is the term that decides how correlated the toss-ups are, so the
+# wider of two defensible values is the right one. Left where it was.
 SIGMA_NATIONAL_MARGIN_HOUSE = 3.0
 
-# Total error for POLLED districts. Above the Senate's 5.2 because district
-# polls are sparser, less frequent, more often partisan-sponsored, and rated
-# lower than statewide Senate polls — the same reasons house_ingest.py has to
-# work harder to dedupe them.
+# Total error for POLLED districts. UNCHANGED at 6.0, and still UNMEASURED:
+# the backtest covers the lean-only path only. Testing this one needs an archive
+# of historical DISTRICT polls, which BACKTEST_SCOPE.md §7 records as
+# unobtainable after 538 went dark — the same wall the Senate work hit, one
+# level further down. The original reasoning stands: district polls are sparser,
+# less frequent, more often partisan-sponsored and rated lower than the
+# statewide Senate polls behind SIGMA_TOTAL_MARGIN (5.2).
 SIGMA_TOTAL_MARGIN_HOUSE_POLLED = 6.0
 
-# Total error for LEAN-ONLY districts. This is the big one and the least
-# defensible: it stands in for "how wrong is a 2022-vintage partisan lean about
-# a 2026 result", absorbing candidate quality, incumbency, retirements, and —
-# for the 95 districts in TX/NC/OH/FL — boundaries that no longer exist. Set to
-# roughly double the polled figure. If this number is wrong, every P(control)
-# this model prints is wrong, because 399 of 435 districts depend on it.
-SIGMA_TOTAL_MARGIN_HOUSE_LEAN = 11.0
+# Total error for LEAN-ONLY districts whose LINES STILL STAND. Was 11.0.
+# Measured: local SD 6.8-7.6 overall and 7.2-8.6 inside the competitive band,
+# across three same-cycle pairs and one one-cycle-stale pair. 8.0 is adopted
+# rather than the ~7.4 midpoint for two stated reasons: 2026 is TWO cycles
+# stale and the sample only reaches one, and the competitive band — the only
+# place a sigma can change a seat — reads consistently above the pooled figure.
+SIGMA_TOTAL_MARGIN_HOUSE_LEAN = math.sqrt(8.0**2 + SIGMA_NATIONAL_MARGIN_HOUSE**2)
+
+# Total error for LEAN-ONLY districts whose LINES HAVE BEEN REDRAWN since the
+# lean vintage. NEW. In 2026 this is the 95 districts in TX/NC/OH/FL that
+# data/district_lean_overrides.csv has not yet given a hand-sourced current
+# figure — the ones fetch_district_lean.py prints a warning about on every run.
+#
+# Measured at local SD 16.0, from four readings that bracket it: three decennial
+# redraws at 16.2/17.3/17.5 (13.3/14.4/14.6 once California's wholesale
+# renumbering is removed, which is more disruptive than a targeted mid-decade
+# redraw), and North Carolina's 2019 MID-DECADE redraw — the right kind of event,
+# and the 2026 shape exactly — at 22.5 on n=12.
+#
+# Read this as the honest width of "we do not know what is in this district any
+# more", not as a refined estimate. It is roughly double the intact figure, and
+# it is the number that should fall the moment an override lands: a district
+# with a hand-sourced lean on current lines is an INTACT district, and
+# house_model.py routes it accordingly off district_lean.csv's source column.
+SIGMA_TOTAL_MARGIN_HOUSE_LEAN_REDRAWN = math.sqrt(
+    16.0**2 + SIGMA_NATIONAL_MARGIN_HOUSE**2)
 
 # Local (independent) components — DERIVED, do not set by hand. Same identity
-# as the Senate: sigma_total^2 = sigma_national^2 + sigma_local^2.
-# Current values: sqrt(6^2 - 3^2) ≈ 5.20, sqrt(11^2 - 3^2) ≈ 10.58
+# as the Senate: sigma_total^2 = sigma_national^2 + sigma_local^2. Because the
+# totals above are now themselves built from a local term plus the national one,
+# these invert cleanly back to 6.0 / 8.0 / 16.0.
 SIGMA_LOCAL_MARGIN_HOUSE_POLLED = math.sqrt(
     SIGMA_TOTAL_MARGIN_HOUSE_POLLED**2 - SIGMA_NATIONAL_MARGIN_HOUSE**2)
 SIGMA_LOCAL_MARGIN_HOUSE_LEAN = math.sqrt(
     SIGMA_TOTAL_MARGIN_HOUSE_LEAN**2 - SIGMA_NATIONAL_MARGIN_HOUSE**2)
+SIGMA_LOCAL_MARGIN_HOUSE_LEAN_REDRAWN = math.sqrt(
+    SIGMA_TOTAL_MARGIN_HOUSE_LEAN_REDRAWN**2 - SIGMA_NATIONAL_MARGIN_HOUSE**2)
 
 # =====================================================================
 # HOUSE NATIONAL ENVIRONMENT (house_model.py)

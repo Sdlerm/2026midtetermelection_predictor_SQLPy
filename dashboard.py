@@ -33,6 +33,9 @@ from calibration import (
     LIKELY_MARGIN_THRESHOLD,
     HOUSE_MAJORITY,
     N_SIMS,
+    SIGMA_TOTAL_MARGIN_HOUSE_LEAN,
+    SIGMA_TOTAL_MARGIN_HOUSE_LEAN_REDRAWN,
+    SIGMA_TOTAL_MARGIN_HOUSE_POLLED,
 )
 from house_model import national_environment_margin, predict_house_races
 from senate_model import ECON_WEIGHT, STATES_WITH_2026_RACES, predict_all_races, project_senate_control
@@ -682,16 +685,45 @@ else:
     st.caption("435 seats is odd — one party always clears 218, so P(R) is the exact "
                "complement of P(D). There is no tie case and no tiebreaker.")
 
+    # This box used to open "these probabilities rest on unvalidated error
+    # estimates" and close "treat these figures as order-of-magnitude", because
+    # the House sigmas were argued from the Senate by analogy and nothing had
+    # ever scored them. backtest_house.py scored them (2026-08-27), so the box
+    # now has to say something harder and more specific: which parts are
+    # measured, which are not, and what is left carrying the uncertainty. Every
+    # count and sigma below is read off the live objects rather than typed, on
+    # the same principle as load_house_sensitivity — a caveat that can go stale
+    # silently is worse than no caveat.
+    _n_total = _hse_sim["n_lean_only"] + _hse_sim["n_polled"]
+    _n_intact = _hse_sim["n_lean_only"] - _hse_sim["n_lean_redrawn"]
     st.warning(
-        f"**These probabilities rest on unvalidated error estimates.** The Senate σ "
-        f"values trace to published pollster-accuracy work; the House σ values in "
-        f"`calibration.py` are reasoned by analogy and have not been backtested. "
-        f"{_hse_sim['n_lean_only']} of {_hse_sim['n_lean_only'] + _hse_sim['n_polled']} "
-        f"districts ride on the lean-only σ, itself applied to 2022-vintage lean "
-        f"(95 districts on boundaries that no longer exist). "
+        f"**The district error estimates are measured; the national environment "
+        f"driving them is not.** The lean-only σ values in `calibration.py` were "
+        f"backtested in August 2026 against 2018, 2020 and 2022 — 538 partisan-lean "
+        f"vintages pinned to commits published before each election, scored against "
+        f"certified FEC returns — then validated against realized win rates rather "
+        f"than only against their own residual spread. The tails come back honest: "
+        f"districts put at ~89% won 87% of the time and those at ~99% won 100%. The "
+        f"middle bands do not, and the reason is the incumbency bias noted at the "
+        f"end of this box — a centering error, which widening σ would hide rather "
+        f"than fix. That measurement split one σ into "
+        f"two: **{_n_intact} districts** whose 2022 lines still stand carry "
+        f"σ≈{SIGMA_TOTAL_MARGIN_HOUSE_LEAN:.1f} (the backtest reads 7.2–7.5 on "
+        f"unchanged lines, and ageing a lean costs about a quarter-point per cycle), "
+        f"while the **{_hse_sim['n_lean_redrawn']} districts** in TX/NC/OH/FL redrawn "
+        f"in 2025 carry σ≈{SIGMA_TOTAL_MARGIN_HOUSE_LEAN_REDRAWN:.1f} — roughly "
+        f"double, because a lean describing boundaries that no longer exist missed by "
+        f"16–22 points historically. The old single σ of 11.0 was wrong in both "
+        f"directions. "
+        f"Two inputs remain unmeasured. The polled-district "
+        f"σ≈{SIGMA_TOTAL_MARGIN_HOUSE_POLLED:.1f} covers "
+        f"{_hse_sim['n_polled']} of {_n_total} districts and still has no historical "
+        f"district-poll archive to test against. "
         f"{_house_env_note()} "
         f"{load_house_sensitivity()} "
-        f"Treat these figures as order-of-magnitude."
+        f"One known bias is quantified but uncorrected: an incumbent runs about 3 "
+        f"points of margin ahead of their district's lean, and the model has a roster "
+        f"for only ~83 districts, so it cannot apply that correction evenly."
     )
 
     st.plotly_chart(

@@ -27,7 +27,9 @@ WHAT TIER 2 STILL DOES NOT DO
     control call — that needs a Monte Carlo over correlated district errors.
     This file reports seat COUNTS only; monte_carlo_house.py turns them into
     probabilities and owns the correlation structure and the per-district error
-    sigmas (which differ for polled vs lean-only districts).
+    sigmas. What this file DOES owe it is the routing: every row carries
+    has_polls and lean_redrawn, and between them those two flags pick which of
+    three measured sigmas the district draws.
   * NO MEASURED generic ballot. 538's generic-ballot feed is dead (its polls-
     page CSVs all return HTML now), so the national environment is INFERRED
     from presidential approval via the midterm regression in calibration.py
@@ -36,11 +38,19 @@ WHAT TIER 2 STILL DOES NOT DO
     generic-ballot polling upgrades this automatically. Until then the
     environment term carries a ~2.6pp regression residual on top of everything
     else, which is why SIGMA_NATIONAL_MARGIN_HOUSE is not small.
-  * NO INCUMBENCY. house_nominees.csv names an incumbent in only ~83 districts,
-    so uniform swing is applied to a presidential lean with no incumbency
-    correction. This matters most where it is least visible: a well-entrenched
-    incumbent in a district the environment says should flip. The lean-only
-    sigma absorbs it as noise; it does not correct for it.
+  * NO INCUMBENCY, and it is now measured. house_nominees.csv names an incumbent
+    in only ~83 districts, so uniform swing is applied to a presidential lean
+    with no incumbency correction. This matters most where it is least visible:
+    a well-entrenched incumbent in a district the environment says should flip.
+    The lean-only sigma absorbs it as noise; it does not correct for it.
+    backtest_house.py §5 priced that noise across 2018/2020/2022: an incumbent
+    of either party runs ~3 points of margin ahead of their district's lean, and
+    ~4-5 points ahead inside the competitive band, while open seats sit near
+    zero. Correcting for it would cut the intact-lines sigma from ~7.2 to ~6.6.
+    The blocker is coverage, not method — applying the offset to the ~83
+    rostered districts and not the other ~350 would miscentre them against each
+    other. A full incumbency roster is the cheapest remaining accuracy win in
+    this file, and it is a data-collection job.
   * NO incumbency for unrostered districts. house_nominees.csv covers ~83
     districts; the other ~350 have no known incumbent, so their flip status is
     unknowable and is reported as False rather than guessed. Seat-count deltas
@@ -58,13 +68,22 @@ it.
 
 BIAS LEDGER
 -----------
-The lean under ~396 of these districts is 538's 2022-vintage partisan lean —
+The lean under ~391 of these districts is 538's 2022-vintage partisan lean —
 2016/2020 presidential results on 2022 maps. It contains no 2024, and for the
 95 districts in redrawn states it describes boundaries that no longer exist
 (see fetch_district_lean.py, which prints them on every run). Unpolled
 projections are therefore materially weaker than polled ones, and weakest of
 all in TX/NC/OH/FL. The honest read: this file now covers the chamber, but
 coverage is not accuracy.
+
+What backtest_house.py added in 2026-08 is the SIZE of that gap, which this
+ledger previously could only assert. Against 2018/2020/2022, a lean on intact
+lines misses by SD ~7.5 and ageing costs about a quarter-point per cycle; a
+lean on redrawn lines misses by SD 16-22. The two are not the same failure and
+the model no longer treats them as one — lean_geometry_is_stale() below routes
+each district to its own sigma. The ordering in the paragraph above turns out
+to be right and the magnitude understated: it is not that TX/NC/OH/FL are
+"weakest of all", it is that they are twice as weak as everything else.
 """
 
 import csv
@@ -91,9 +110,15 @@ LEAN_ALPHA_HOUSE = 0.80   # (1-alpha) = 0.20 is the lean weight
 # here just starts the same comment rotting again. Read it from senate_model.
 # Left at 0.80 because it is UNBACKTESTED and copying the Senate's
 # figure would import a number measured on statewide polls into district polls,
-# which are sparser and more often partisan-sponsored. See backtest_senate.py
-# for the Senate result and why a House equivalent needs historical district
-# lean vintages before it can be run at all.
+# which are sparser and more often partisan-sponsored.
+#
+# backtest_house.py (2026-08-27) does now exist and did recover the historical
+# district lean vintages this comment used to name as the blocker — but it
+# measures the LEAN-ONLY path, where alpha does not appear. Sweeping alpha needs
+# historical district POLLS, and BACKTEST_SCOPE.md §7 records those as
+# unobtainable after 538 went dark. So this constant is still where it was, for
+# a narrower reason than before: not "the data problem is unsolved" but "the
+# solved data problem is the wrong one for this number."
 
 DISTRICT_LEAN_PATH = os.path.join(os.path.dirname(__file__), "data", "district_lean.csv")
 
@@ -102,18 +127,24 @@ GENERIC_NAME = {"D": "Democratic candidate", "R": "Republican candidate"}
 
 def load_district_lean(path=DISTRICT_LEAN_PATH):
     """
-    Read data/district_lean.csv into {(state, district): dem_margin}.
+    Read data/district_lean.csv into ({(state, district): dem_margin},
+    {(state, district): source}).
 
     Generated by fetch_district_lean.py — a missing file is a setup error, not
     a data gap, so it raises rather than silently degrading all 435 districts
     to neutral (which would look like a working model producing 50-50 ties).
+
+    The source column comes back alongside the margin because it is a MODELLING
+    input now, not provenance decoration: lean_geometry_is_stale() reads it to
+    decide which sigma a district gets, and an override is the thing that moves
+    a redrawn district back into the narrow tier.
     """
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"{path} not found — run fetch_district_lean.py first."
         )
 
-    lean = {}
+    lean, sources = {}, {}
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
             key = (row.get("district") or "").strip().upper()
@@ -122,7 +153,36 @@ def load_district_lean(path=DISTRICT_LEAN_PATH):
                 continue
             state, _, district = key.partition("-")
             lean[(state, _pad(district))] = float(margin)
-    return lean
+            sources[(state, _pad(district))] = (row.get("source") or "").strip()
+    return lean, sources
+
+
+# States whose 2026 lines differ from the 2022 lines district_lean.csv's base
+# source describes. Duplicated from fetch_district_lean.REDRAWN rather than
+# imported for the same reason that file duplicates it from dashboard.py: the
+# import would be the only edge between a model file and a data script.
+REDRAWN_STATES = {"TX", "NC", "OH", "FL"}
+
+
+def lean_geometry_is_stale(state, district, lean_sources):
+    """
+    Does this district's lean describe boundaries that no longer exist?
+
+    True for a district in a 2025-redrawn state that has NOT been given a
+    hand-sourced override. That is the exact condition fetch_district_lean.py
+    prints a warning about on every run; until now nothing downstream acted on
+    it, and all 435 lean-only districts drew the same sigma regardless.
+
+    backtest_house.py measured what the difference is worth: a lean on intact
+    lines misses with SD ~7.5, one on redrawn lines with SD 16-22. So this
+    predicate selects between SIGMA_*_HOUSE_LEAN and _LEAN_REDRAWN, and adding
+    an override to district_lean_overrides.csv narrows that district's sigma as
+    a side effect of correcting its margin — which is the right coupling, since
+    a hand-sourced lean on current lines IS an intact-lines lean.
+    """
+    if state not in REDRAWN_STATES:
+        return False
+    return lean_sources.get((state, district)) != "override"
 
 
 def national_environment_margin(year=2026):
@@ -239,7 +299,7 @@ def predict_house_races(year=2026):
     of polls rather than the only 2026 information in the model.
     """
     roster, _skipped = load_house_nominees()
-    district_lean = load_district_lean()
+    district_lean, lean_sources = load_district_lean()
     climate  = get_climate_score(year)
     approval = get_approval_score(year)
     env, env_source = national_environment_margin(year)
@@ -298,6 +358,7 @@ def predict_house_races(year=2026):
                 "projected": projected,
                 "poll_stderr": poll_stderr,
                 "has_polls": True,
+                "lean_redrawn": lean_geometry_is_stale(state, district, lean_sources),
                 "is_incumbent": info.get("is_incumbent", False),
                 "incumbent_party": incumbent_party,
                 "incumbent_known": bool(incumbent_party),
@@ -345,6 +406,7 @@ def predict_house_races(year=2026):
                 "projected": round(lean, 2),
                 "poll_stderr": None,
                 "has_polls": False,
+                "lean_redrawn": lean_geometry_is_stale(state, district, lean_sources),
                 "is_incumbent": info.get("is_incumbent", False),
                 "incumbent_party": incumbent_party,
                 # Unrostered districts have no known incumbent, so _finalize_race
@@ -440,5 +502,6 @@ if __name__ == "__main__":
     print(f"  R leads: {r_leads}  (polled {r_polled}, lean-only {r_leads - r_polled})")
     print(f"  Within {TILT_MARGIN_THRESHOLD:g}pt (already counted in the leads above): {tilts}")
     print(f"\n  Seat COUNTS only — not a control probability. Lean-only districts")
-    print(f"  rest on 2022-vintage lean; see the bias ledger at the top of this file.")
+    print(f"  rest on 2022-vintage lean, and those in TX/NC/OH/FL rest on boundaries")
+    print(f"  that no longer exist; see the bias ledger at the top of this file.")
     print(f"{'─'*62}")

@@ -1,12 +1,20 @@
 # Scoping: deriving sigma from a real backtest
 
-**Status:** ~~plan only~~ — **partly executed 2026-08-10.** Built:
-`load_historical_polls.py` (2018 + 2020 polls), `as_of` threading through
-`senate_model.py`, and `backtest_senate.py`. The blend weight `LEAN_ALPHA` has
-been backtested; the sigma constants have **not** been changed. Jump to
-[§7 Results](#7-results-2026-08-10) for what came back — including two places
-where this plan's expectations were wrong.
-**Date:** 2026-07-29 (results appended 2026-08-10)
+**Status:** ~~plan only~~ — **Senate partly executed 2026-08-10; House executed
+2026-08-27.** Built: `load_historical_polls.py` (2018 + 2020 polls), `as_of`
+threading through `senate_model.py`, `backtest_senate.py`, and — for the House
+project §5 deferred — `fetch_house_backtest_data.py` and `backtest_house.py`.
+
+The Senate blend weight `LEAN_ALPHA` has been backtested; the Senate sigma
+constants have **not** been changed, and §7 explains why they cannot be at n=2.
+The **House lean sigmas HAVE been changed**: they were the ones §5 called the
+larger project, and they are now measured rather than reasoned.
+
+Jump to [§7 Results](#7-results-2026-08-10) for the Senate, or
+[§8 The House backtest](#8-the-house-backtest-2026-08-27) for the House —
+including the place where §5's framing of the House problem turned out to have
+the right ingredients in the wrong proportions.
+**Date:** 2026-07-29 (Senate results 2026-08-10, House results 2026-08-27)
 **Goal:** replace `calibration.py`'s sigma constants with values measured from this model's own historical error, instead of borrowed from published pollster-accuracy work.
 
 ---
@@ -157,3 +165,137 @@ measurement.
   remaining win.
 - **A House equivalent** still needs historical *district* lean vintages, and
   the state-lean vintage finding above says that data problem is the whole job.
+
+---
+
+## 8. The House backtest (2026-08-27)
+
+**Status:** executed. §5 called this "a different, larger project" that "deserves
+its own scoping pass"; §7 closed with "a House equivalent still needs historical
+*district* lean vintages, and the state-lean vintage finding above says that data
+problem is the whole job." Both were right about the shape and wrong about the
+difficulty. The data problem was the whole job, and it turned out to be solvable
+in an afternoon.
+
+Run `python fetch_house_backtest_data.py && python backtest_house.py`.
+
+### The data problem, and why it was easier than §7 expected
+
+**Lean vintages were hiding in git.** `fetch_district_lean.py` pulls 538's
+partisan-lean file from `master`, which holds exactly one column (`2022`), so
+there appeared to be one vintage in existence. But 538 rewrote that file in
+place four times and never deleted a version. Pinning the commits recovers four
+vintages — 2018, 2020, 2021, 2022 — *each published before the election it is
+then used to predict*. No lookahead, no reconstruction, no approximation. This
+is the single reason the House backtest exists.
+
+**Results came from the FEC, not MEDSL.** `load_historical.py` sourced the
+Senate's realized outcomes from MEDSL. MEDSL's Dataverse copy of the House file
+now sits behind a guestbook that returns `400 "You may not download this file
+without the required Guestbook response"` — not scriptable. The FEC's
+*Federal Elections* workbooks are the same certifications, ungated, one per
+cycle. **They stop at 2022**: there is no `federalelections2024.xlsx`, and the
+Clerk's equivalent is a PDF. So this is a three-cycle backtest whose newest
+observation is four years before the election being forecast.
+
+Four parsing rules turned out to be load-bearing rather than cosmetic, and they
+are documented at the top of `fetch_house_backtest_data.py`: fusion voting in
+NY/CT (sum per FEC candidate ID, since the "Combined Parties:" row carries no
+vote count and therefore cannot double-count), interleaved aggregate rows (all
+carry FEC ID `n/a`), concurrent unexpired-term specials, and at-large districts
+written `00` at the FEC and `-1` at 538.
+
+### The finding
+
+**`SIGMA_TOTAL_MARGIN_HOUSE_LEAN = 11.0` was not one number badly estimated. It
+was two very different numbers averaged together.**
+
+| what the lean is up against | SD | n |
+|---|---|---|
+| intact lines, same cycle as vintage | 7.19 | 1174 |
+| intact lines, vintage one cycle old | 7.54 | 387 |
+| redrawn lines — decennial (2012 lean vs 2022 map) | 17.01 | 1158 |
+| redrawn lines — mid-decade (NC 2019, the 2026 shape) | 22.50 | 12 |
+
+Ageing a lean costs about **a quarter-point of SD per cycle**. Redistricting
+under it costs **more than the entire intact sigma over again**. The old 11.0
+was therefore too wide for the 310 districts whose 2022 lines still stand and
+far too narrow for the 81 in TX/NC/OH/FL that were redrawn in 2025 — and no
+single constant can be right for a map containing both.
+
+Adopted, and wired through `monte_carlo_house.simulate` as a third sigma tier:
+
+| constant | was | now | basis |
+|---|---|---|---|
+| `SIGMA_NATIONAL_MARGIN_HOUSE` | 3.0 | **3.0** | unchanged; n=3 reads 1.94 and cannot move it |
+| `SIGMA_TOTAL_MARGIN_HOUSE_POLLED` | 6.0 | **6.0** | unchanged; still untested, see below |
+| `SIGMA_TOTAL_MARGIN_HOUSE_LEAN` | 11.0 | **8.5** | local 8.0, intact lines |
+| `SIGMA_TOTAL_MARGIN_HOUSE_LEAN_REDRAWN` | — | **16.3** | local 16.0, redrawn lines |
+
+Effect on the live forecast: P(D majority) 87% → 91.5%, mean D seats 237 → 240.
+Most of that is the intact tier tightening, not the redrawn tier widening —
+there are nearly four times as many districts in it.
+
+The routing is deliberately coupled to `district_lean_overrides.csv`:
+`house_model.lean_geometry_is_stale()` reads `district_lean.csv`'s `source`
+column, so hand-sourcing a current-lines lean for a redrawn district narrows its
+sigma as a side effect of correcting its margin. That is the right coupling — a
+hand-sourced lean on current lines *is* an intact-lines lean — and it means the
+81-district wide tier shrinks as the override file fills in.
+
+### Where this plan's §5 was right, and where it was wrong
+
+**Right, again, about the national term.** §5 argued the Senate's
+`SIGMA_NATIONAL_MARGIN` could not be improved at n=4. The House version has n=3
+and reads 1.94 against the model's 3.0. Left alone, for the third time.
+
+**Wrong about what makes a lean go stale.** §5's framing — and
+`calibration.py`'s original comment — treated "2022-vintage lean predicting a
+2026 race" as one quantity absorbing "candidate quality, incumbency,
+retirements, and boundaries that no longer exist." Measured, the boundary term
+dwarfs everything else in that list, and the vintage term is nearly free. The
+comment had the right ingredients and the wrong proportions.
+
+**The lean scale-mismatch flagged in `fetch_district_lean.py`'s bias ledger is
+visible and small.** 538's lean is presidential-derived while the environment
+subtracted from it is a House vote; that shows up as the per-cycle mean residual
+(−0.73 / +0.09 / +2.97), i.e. under 3 points, and it lands in the national term
+rather than the district term.
+
+### The sigmas are validated, not just estimated
+
+Estimating a sigma from residuals and then reporting the residual spread is
+circular. `backtest_house.py` §4 scores every district to a win probability
+under the adopted sigma, bins them, and compares to the realized rate. The tails
+come back honest at these values — 0.95-1.00 predicts 99.5% and realizes 100.0%
+on intact lines. This is the only check in either backtest that could return
+"the number is wrong."
+
+### What is still open
+
+- **`SIGMA_TOTAL_MARGIN_HOUSE_POLLED` is still unmeasured** and still 6.0.
+  Testing it needs historical *district* polls, which §7 already recorded as
+  unobtainable after 538 went dark. Same wall, one level further down. It covers
+  44 of 435 districts, so the exposure is bounded.
+- **No 2024 cycle**, so nothing observes a lean two cycles stale on intact lines
+  — which is the 2026 configuration for 310 districts. The adopted 8.0 sits above
+  the measured 7.2-7.5 partly to cover that extrapolation. Re-run this when the
+  FEC publishes 2024.
+- **Incumbency is now quantified and still uncorrected.** §5 of
+  `backtest_house.py`: an incumbent runs ~3 points of margin ahead of their
+  district's lean (~4-5 inside the competitive band); open seats sit near zero.
+  Removing a per-cycle incumbency offset would take the intact-lines SD from
+  ~7.2 to ~6.6. This is the whole of the residual miscalibration in the
+  0.40-0.60 probability band, and it is a *centering* error — widening sigma
+  would hide it, not fix it. **The blocker is that `house_nominees.csv` names an
+  incumbent in only ~83 of 435 districts**, so the correction would apply to a
+  fifth of the map and miscentre it against the rest. Sourcing a full incumbency
+  roster is now the cheapest remaining accuracy win in the House model, and it
+  is a data-collection job rather than a modelling one.
+- **Uncontested districts are excluded from every sigma here** (52/36/43 across
+  the three cycles) because a ±100 margin is a ballot-access fact, not a
+  measurement. The 2026 model projects all 435 as two-way contests and so has no
+  representation of this at all.
+- **`LEAN_ALPHA_HOUSE` remains unbacktested at 0.80.** The lean-only path this
+  backtest measures is the path where alpha does not appear; sweeping it needs
+  the district polls that do not exist.
