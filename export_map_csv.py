@@ -1,5 +1,5 @@
 import csv
-from model import predict_all_races
+from senate_model import predict_all_races
 
 def export_map_csv(path="map_data.csv", year=2026):
     predictions, _, _ = predict_all_races(year)

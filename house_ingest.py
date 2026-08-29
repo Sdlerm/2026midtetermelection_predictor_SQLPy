@@ -1,312 +1,208 @@
-"""
-house_ingest.py — Loads House polling data into elections.db.
-
-Two things get ingested:
-  1. District polls: rows from house.csv where state != 'US', filtered to
-     confirmed general-election nominees from house_nominees.csv.
-  2. Generic ballot: rows from house.csv where state == 'US', stored as a
-     special race (state='US', district='') for use in House control projection.
-
-Run after init_db.py and before house_model.py.
-Safe to re-run — wipes House races first, then reloads.
-Senate data is untouched (different district values).
-"""
-
 import os
-import csv
 import pandas as pd
-from datetime import datetime, date
 from init_db import get_connection
 from senate_ingest import upsert_pollster, upsert_race, upsert_candidate
 
-DATA_DIR           = os.path.join(os.path.dirname(__file__), "data")
-HOUSE_CSV          = os.path.join(DATA_DIR, "house.csv")
-HOUSE_NOMINEES_CSV = os.path.join(DATA_DIR, "house_nominees.csv")
+_HOUSE_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "house_nominees.csv")
+_HOUSE_POLLS_PATH    = os.path.join(os.path.dirname(__file__), "data", "house.csv")
 
-# ---------------------------------------------------------------------------
-# Load confirmed nominees from house_nominees.csv
-# Returns: dict (state, district) -> { party -> name }
-# Skips primaries and rows missing both nominees.
-# ---------------------------------------------------------------------------
 
-def _split_names(raw):
+def _pad(district):
+    """Normalize any district representation (1, 1.0, '1') to zero-padded text: '01'.
+    Zero-padding matters because TEXT sorts character-by-character ('10' < '7' but '07' < '10')."""
+    return f"{int(float(district)):02d}"
+
+
+def load_house_nominees(path=_HOUSE_NOMINEES_PATH):
     """
-    Splits a nominees.csv field that may contain one name, or multiple
-    names joined by a comma (e.g. CA's top-two jungle primary advances
-    two candidates from the same party: "Connie Chan, Scott Wiener").
-    Strips stray whitespace/tabs from each name. Returns a list (possibly
-    empty, possibly length 1, possibly length 2+).
+    Read the wide-format nominees file and reshape to the long dict shape the
+    rest of the pipeline expects: {(state, district, party): {"name": ...}}.
+
+    A district enters the roster ONLY if BOTH dem_nominee and rep_nominee are
+    filled (Samuel's rule, 2026-07-17). Everything else is returned in
+    `skipped` with a reason, for the end-of-run summary. The CSV itself is
+    scripture — this function adapts, never edits.
     """
-    raw = raw.strip()
-    if not raw:
-        return []
-    return [name.strip() for name in raw.split(",") if name.strip()]
+    df = pd.read_csv(path)
+    roster, skipped = {}, []
+
+    for _, row in df.iterrows():
+        state    = str(row["state"]).strip().upper()
+        district = _pad(row["district"])
+        key      = f"{state}-{district}"
+
+        dem = str(row["dem_nominee"]).strip() if pd.notna(row["dem_nominee"]) else ""
+        rep = str(row["rep_nominee"]).strip() if pd.notna(row["rep_nominee"]) else ""
+
+        if not dem and not rep:
+            skipped.append((key, "no nominees yet"))
+            continue
+        if not dem or not rep:
+            skipped.append((key, "one side unsettled"))
+            continue
+
+        roster[(state, district, "D")] = {"name": dem}
+        roster[(state, district, "R")] = {"name": rep}
+
+        dem_inc = pd.notna(row.get("dem_incumbent")) and str(row["dem_incumbent"]).strip() not in ("", "0")
+        rep_inc = pd.notna(row.get("rep_incumbent")) and str(row["rep_incumbent"]).strip() not in ("", "0")
+        roster[(state, district, "D")] = {"name": dem, "is_incumbent": dem_inc}
+        roster[(state, district, "R")] = {"name": rep, "is_incumbent": rep_inc}
+
+        # Independent nominee is optional; include when present (future NE-style races)
+        if pd.notna(row.get("ind_nominee")) and str(row["ind_nominee"]).strip():
+            roster[(state, district, "I")] = {"name": str(row["ind_nominee"]).strip(), "is_incumbent": False}
+
+    return roster, skipped
 
 
-def _load_confirmed_nominees():
+def _build_district_tokens(roster):
+    """Per-district name tokens for question-block dedup — same idea as
+    senate_ingest._build_state_tokens, keyed one level deeper."""
+    tokens = {}
+    for (state, district, _party), info in roster.items():
+        bucket = tokens.setdefault((state, district), set())
+        for tok in info["name"].lower().split():
+            if len(tok) > 2:
+                bucket.add(tok)
+    return tokens
+
+
+def load_house_polls(filepath=_HOUSE_POLLS_PATH, year=2026):
+    """Replace the 2026 House poll data in the DB with the contents of `filepath`.
+
+    DESTRUCTIVE, but only after the input is known good: every read, filter
+    and dedup below runs before the wipe, and the wipe shares one transaction
+    with the inserts. A missing or malformed house.csv therefore raises with
+    the existing rows untouched, rather than emptying the table and then
+    failing on the read.
     """
-    Returns a dict keyed by (state, district) whose values are
-    { 'D': [names], 'R': [names], 'I': [names] } for whichever parties
-    are confirmed. A party's list normally holds one name, but can hold
-    two or more when multiple same-party candidates advance to the
-    general (e.g. CA-style top-two primaries: CA-11, CA-14 for Democrats,
-    CA-40 for Republicans).
-    Primary rows and fully-blank rows are skipped.
-    """
-    confirmed = {}
-    with open(HOUSE_NOMINEES_CSV, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if "primary" in row.get("notes", "").lower():
-                continue
-            state    = row["state"].strip()
-            district = row["district"].strip()
-            dem      = _split_names(row.get("dem_nominee", ""))
-            rep      = _split_names(row.get("rep_nominee", ""))
-            ind      = _split_names(row.get("ind_nominee", ""))
-            if not dem and not rep and not ind:
-                continue
-            entry = {}
-            if dem:
-                entry["D"] = dem
-            if rep:
-                entry["R"] = rep
-            if ind:
-                entry["I"] = ind
-            confirmed[(state, district)] = entry
-    return confirmed
+    roster, skipped_nominees = load_house_nominees()
+    rostered_districts = {(s, d) for (s, d, _p) in roster}
 
+    df = pd.read_csv(filepath)
 
-# ---------------------------------------------------------------------------
-# Build a name -> (state, district, party) lookup for fast poll row matching
-# ---------------------------------------------------------------------------
-
-def _build_nominee_lookup(confirmed):
-    """
-    Inverts confirmed nominees dict into:
-      candidate_name -> (state, district, party)
-    Used to decide whether a poll row belongs to a confirmed general-election race.
-    Each party slot may hold multiple names (e.g. CA top-two primaries send
-    two same-party candidates to the general) — every name maps individually.
-    """
-    lookup = {}
-    for (state, district), parties in confirmed.items():
-        for party, names in parties.items():
-            for name in names:
-                lookup[name] = (state, district, party)
-    return lookup
-
-
-# ---------------------------------------------------------------------------
-# Generic ballot ingestion
-# Stored as race (year=2026, state='US', district='')
-# Candidates: 'Generic Democrat' (D) and 'Generic Republican' (R)
-# ---------------------------------------------------------------------------
-
-def load_generic_ballot(df, year=2026):
-    """
-    Ingests national generic House ballot polls (state='US') into the DB.
-    Filters to 'Generic Democrat' and 'Generic Republican' only.
-    Uses same recency/credibility pattern as district polls.
-    """
-    generic = df[
-        (df["state"] == "US") &
+    # Same filter battery as Senate ingest, one addition: seat_number must
+    # exist. ORDER MATTERS — the notna() filter must precede _pad(), because
+    # int(NaN) crashes. Generic-ballot and primary rows are what carry the
+    # 2,329 null seat_numbers, so these filters also do that cleanup.
+    df = df[
         (df["stage"] == "general") &
-        (df["candidate_name"].isin(["Generic Democrat", "Generic Republican"]))
-        ].copy()
+        (df["party"].isin(["DEM", "REP"])) &
+        (~df["candidate_name"].isin(["Don't know", "Someone else",
+                                     "Generic Democrat", "Generic Republican"])) &
+        (df["seat_number"].notna())
+    ].copy()
 
-    if generic.empty:
-        print("WARNING: no generic ballot rows found in house.csv")
-        return
+    df["state"]    = df["state"].astype(str).str.strip().str.upper()
+    df["district"] = df["seat_number"].map(_pad)
 
-    # Population priority: lv > rv > a
+    # Restrict to rostered districts. Polled-but-unrostered districts are
+    # reported, not ingested — they're either primary noise or a nudge that
+    # house_nominees.csv needs a new row.
+    df["_key"] = list(zip(df["state"], df["district"]))
+    unrostered = sorted({f"{s}-{d}" for (s, d) in df.loc[~df["_key"].isin(rostered_districts), "_key"]})
+    df = df[df["_key"].isin(rostered_districts)].copy()
+
+    # Recency hygiene — identical to Senate
     pop_priority = {"lv": 0, "rv": 1, "a": 2}
-    generic["pop_rank"] = generic["population"].map(pop_priority).fillna(9)
-    generic = generic.sort_values("pop_rank")
-    generic = generic.drop_duplicates(subset=["poll_id", "candidate_name"], keep="first")
-
-    party_map = {"Generic Democrat": "D", "Generic Republican": "R"}
-
-    con = get_connection()
-    cur = con.cursor()
-
-    race_id = upsert_race(cur, year, "US", district="")
-
-    # Ensure generic candidates exist
-    dem_id = upsert_candidate(cur, race_id, "Generic Democrat", "D")
-    rep_id = upsert_candidate(cur, race_id, "Generic Republican", "R")
-    cand_ids = {"Generic Democrat": dem_id, "Generic Republican": rep_id}
-
-    loaded = 0
-    for _, row in generic.iterrows():
-        try:
-            pct = float(row["pct"])
-        except (ValueError, TypeError):
-            continue
-
-        poll_date = row["end_date"]
-        if pd.isna(poll_date):
-            continue
-
-        try:
-            sample_size = int(row["sample_size"]) if pd.notna(row["sample_size"]) else None
-        except (ValueError, TypeError):
-            sample_size = None
-
-        pollster_id  = upsert_pollster(cur, str(row["pollster"]).strip(),
-                                       row.get("numeric_grade"), row.get("partisan"))
-        candidate_id = cand_ids[row["candidate_name"]]
-
-        cur.execute("""
-            INSERT INTO polls (race_id, candidate_id, pollster_id, poll_date, sample_size, pct)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (race_id, candidate_id, pollster_id, poll_date, sample_size, pct))
-        loaded += 1
-
-    con.commit()
-    con.close()
-    print(f"Loaded {loaded} generic ballot poll entries")
-
-
-# ---------------------------------------------------------------------------
-# District poll ingestion
-# ---------------------------------------------------------------------------
-
-def load_house_district_polls(df, confirmed, nominee_lookup, year=2026):
-    """
-    Ingests district-level House polls into the DB.
-
-    Filtering logic:
-      - stage == 'general'
-      - state != 'US'
-      - candidate_name must match a confirmed nominee in house_nominees.csv
-        (this is the House equivalent of ingest.py's question-block dedup —
-         it ensures we only store polls for actual general-election nominees,
-         not primary candidates or hypothetical matchups)
-      - party must be DEM, REP, or IND (mapped to D/R/I)
-
-    Population dedup: per (poll_id, candidate_name), keep best population tier.
-    """
-    district_df = df[
-        (df["state"] != "US") &
-        (df["stage"] == "general") &
-        (df["party"].isin(["DEM", "REP", "IND"]))
-        ].copy()
-
-    party_map = {"DEM": "D", "REP": "R", "IND": "I"}
-    district_df["party"] = district_df["party"].map(party_map)
-
-    # Population priority dedup
-    pop_priority = {"lv": 0, "rv": 1, "a": 2}
-    district_df["pop_rank"] = district_df["population"].map(pop_priority).fillna(9)
-    district_df = district_df.sort_values("pop_rank")
-    district_df = district_df.drop_duplicates(subset=["poll_id", "candidate_name"], keep="first")
-
-    con = get_connection()
-    cur = con.cursor()
-
-    loaded   = 0
-    skipped  = 0
-
-    for _, row in district_df.iterrows():
-        candidate = str(row["candidate_name"]).strip()
-
-        # Core filter: only confirmed general-election nominees
-        if candidate not in nominee_lookup:
-            skipped += 1
-            continue
-
-        state, district, party = nominee_lookup[candidate]
-
-        try:
-            pct = float(row["pct"])
-        except (ValueError, TypeError):
-            skipped += 1
-            continue
-
-        poll_date = row["end_date"]
-        if pd.isna(poll_date):
-            skipped += 1
-            continue
-
-        try:
-            sample_size = int(row["sample_size"]) if pd.notna(row["sample_size"]) else None
-        except (ValueError, TypeError):
-            sample_size = None
-
-        pollster_id  = upsert_pollster(cur, str(row["pollster"]).strip(),
-                                       row.get("numeric_grade"), row.get("partisan"))
-        race_id      = upsert_race(cur, year, state, district=district)
-        candidate_id = upsert_candidate(cur, race_id, candidate, party)
-
-        cur.execute("""
-            INSERT INTO polls (race_id, candidate_id, pollster_id, poll_date, sample_size, pct)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (race_id, candidate_id, pollster_id, poll_date, sample_size, pct))
-        loaded += 1
-
-    con.commit()
-    con.close()
-    print(f"Loaded {loaded} House district poll entries ({skipped} rows skipped — unconfirmed nominees or bad data)")
-
-
-# ---------------------------------------------------------------------------
-# Wipe existing House data only
-# Senate rows have district='', House rows have district != '' or state='US'.
-# We delete races where district != '' OR state = 'US', cascading via race_id.
-# ---------------------------------------------------------------------------
-
-def _wipe_house_data():
-    """
-    Removes all House-related rows from polls, candidates, and races.
-    Senate rows (district='', state != 'US') are untouched.
-    """
-    con = get_connection()
-    cur = con.cursor()
-
-    # Get race_ids to delete
-    cur.execute("""
-        SELECT id FROM races
-        WHERE district != '' OR state = 'US'
-    """)
-    house_race_ids = [r[0] for r in cur.fetchall()]
-
-    if house_race_ids:
-        placeholders = ",".join("?" * len(house_race_ids))
-        cur.execute(f"DELETE FROM polls      WHERE race_id IN ({placeholders})", house_race_ids)
-        cur.execute(f"DELETE FROM candidates WHERE race_id IN ({placeholders})", house_race_ids)
-        cur.execute(f"DELETE FROM races      WHERE id      IN ({placeholders})", house_race_ids)
-
-    con.commit()
-    con.close()
-    print(f"Cleared {len(house_race_ids)} House race(s) from DB.")
-
-
-# ---------------------------------------------------------------------------
-# Run
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    if not os.path.exists(HOUSE_CSV):
-        print(f"ERROR: {HOUSE_CSV} not found.")
-        raise SystemExit(1)
-    if not os.path.exists(HOUSE_NOMINEES_CSV):
-        print(f"ERROR: {HOUSE_NOMINEES_CSV} not found.")
-        raise SystemExit(1)
-
-    # Load and normalize dates up front — shared by both ingestion functions
-    df = pd.read_csv(HOUSE_CSV)
+    df["pop_rank"] = df["population"].map(pop_priority).fillna(9)
     df["end_date"] = pd.to_datetime(df["end_date"], format="mixed", errors="coerce")
     df = df.dropna(subset=["end_date"])
+    if "election_date" in df.columns:
+        df["_election_dt"] = pd.to_datetime(df["election_date"], errors="coerce")
+        stale = df["_election_dt"].notna() & ((df["_election_dt"] - df["end_date"]).dt.days > 548)
+        if stale.any():
+            print(f"Dropped {stale.sum()} stale House poll row(s)")
+        df = df[~stale].drop(columns=["_election_dt"])
+
+    # Question-block dedup, keyed one level deeper than Senate:
+    # (poll_id, state, district) instead of (poll_id, state).
+    if "question_id" in df.columns:
+        district_tokens = _build_district_tokens(roster)
+        df["question_id"] = df["question_id"].fillna("__default__")
+
+        def _matches(name, toks):
+            return any(t in toks for t in str(name).lower().split())
+
+        keep_idx = []
+        for (_pid, state, district), grp in df.groupby(["poll_id", "state", "district"], sort=False):
+            toks = district_tokens.get((state, district), set())
+            best_qid, best_score = None, (-1.0, -1)
+            for qid, qdf in grp.groupby("question_id", sort=False):
+                cands = qdf["candidate_name"].tolist()
+                n = sum(1 for c in cands if _matches(c, toks))
+                score = (n / len(cands) if cands else 0.0, n)
+                if score > best_score:
+                    best_score, best_qid = score, qid
+            keep_idx.extend(grp.index[grp["question_id"] == best_qid].tolist())
+        df = df.loc[keep_idx].reset_index(drop=True)
+
+    # Population dedup — per (poll_id, district, candidate) so the same name
+    # in two districts (it happens) can't collapse across races.
+    df = df.sort_values("pop_rank")
+    df = df.drop_duplicates(subset=["poll_id", "district", "candidate_name"], keep="first")
+
+    df["party"]    = df["party"].map({"DEM": "D", "REP": "R"})
     df["end_date"] = df["end_date"].dt.strftime("%Y-%m-%d")
-    df["state"]    = df["state"].astype(str).str.strip().str.upper()
 
-    confirmed      = _load_confirmed_nominees()
-    nominee_lookup = _build_nominee_lookup(confirmed)
+    con = get_connection()
+    cur = con.cursor()
 
-    print(f"Confirmed nominees: {len(nominee_lookup)} candidates across {len(confirmed)} races")
+    # Wipe ONLY 2026 House rows: district != '' is the House half of the
+    # partition (the Senate wipe owns district = ''). Plain English: "delete
+    # polls and candidates belonging to 2026 races that have a district
+    # value, then those races themselves" — a Senate refresh can't touch
+    # these, and this can't touch Senate.
+    #
+    # This sits here, not in __main__ ahead of the call, for two reasons:
+    # everything that can reject a bad house.csv has already run by this
+    # line, and sqlite3's implicit transaction means the single commit below
+    # covers the deletes too — so a crash part-way through the insert loop
+    # rolls the wipe back with it instead of leaving the table empty.
+    cleared = cur.execute(
+        "SELECT COUNT(*) FROM races WHERE year = 2026 AND district != ''"
+    ).fetchone()[0]
+    cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
+    cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
+    cur.execute("DELETE FROM races WHERE year = 2026 AND district != ''")
+    print(f"Cleared {cleared} 2026 House race(s) and their polls.")
 
-    _wipe_house_data()
-    load_generic_ballot(df, year=2026)
-    load_house_district_polls(df, confirmed, nominee_lookup, year=2026)
+    loaded = 0
+    for _, row in df.iterrows():
+        pollster_id  = upsert_pollster(cur, str(row["pollster"]).strip(),
+                                       row.get("numeric_grade"), row.get("partisan"))
+        race_id      = upsert_race(cur, year, row["state"], row["district"])
+        candidate_id = upsert_candidate(cur, race_id, str(row["candidate_name"]).strip(), row["party"])
+        cur.execute("""
+            INSERT INTO polls (race_id, candidate_id, pollster_id, poll_date, sample_size, pct)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (race_id, candidate_id, pollster_id, row["end_date"],
+              int(row["sample_size"]) if pd.notna(row["sample_size"]) else None,
+              float(row["pct"])))
+        loaded += 1
+    con.commit()
+    con.close()
 
-    print("House ingest complete.")
+    # ---- Summary: every skip is loud, none is fatal ----
+    polled = {(s, d) for (s, d) in df["_key"]} if "_key" in df else set()
+    unpolled_roster = sorted(f"{s}-{d}" for (s, d) in rostered_districts if (s, d) not in polled)
+
+    print(f"\nLoaded {loaded} House poll rows across {len(polled)} districts.")
+    if skipped_nominees:
+        print(f"{len(skipped_nominees)} nominee rows skipped:")
+        for key, why in skipped_nominees:
+            print(f"  - {key}: {why}")
+    if unrostered:
+        print(f"{len(unrostered)} polled district(s) not in house_nominees.csv (polls discarded): {', '.join(unrostered)}")
+    if unpolled_roster:
+        print(f"{len(unpolled_roster)} rostered district(s) with no polls — your future Tier 2 seed list: {', '.join(unpolled_roster)}")
+
+
+if __name__ == "__main__":
+    # The wipe lives inside load_house_polls, in the same transaction as the
+    # inserts. This check only buys a readable message instead of a traceback.
+    if not os.path.exists(_HOUSE_POLLS_PATH):
+        print(f"ERROR: {_HOUSE_POLLS_PATH} not found. Download it manually and place it in data/")
+    else:
+        load_house_polls()
