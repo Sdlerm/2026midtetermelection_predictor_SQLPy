@@ -4,7 +4,13 @@ from init_db import get_connection
 from senate_ingest import upsert_pollster, upsert_race, upsert_candidate
 
 _HOUSE_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "house_nominees.csv")
-_HOUSE_POLLS_PATH    = os.path.join(os.path.dirname(__file__), "data", "house.csv")
+# Overridable for the same reason as init_db.DB_PATH: the wipe-before-validate
+# bug lived in __main__, and pinning it needs the script run end-to-end against
+# a throwaway input. Unset in normal use.
+_HOUSE_POLLS_PATH    = os.environ.get(
+    "HOUSE_POLLS_CSV",
+    os.path.join(os.path.dirname(__file__), "data", "house.csv"),
+)
 
 
 def _pad(district):

@@ -1,7 +1,15 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "db", "elections.db")
+# Overridable so the entry points can be exercised against a throwaway DB.
+# Without this, every script in this repo resolves the database from its own
+# __file__, and the only way to test one end-to-end is to point it at the real
+# data — which is how the house_ingest wipe-before-validate bug reached master
+# untested. Unset in normal use, so behaviour is unchanged.
+DB_PATH = os.environ.get(
+    "ELECTIONS_DB",
+    os.path.join(os.path.dirname(__file__), "db", "elections.db"),
+)
 
 def get_connection():
     """

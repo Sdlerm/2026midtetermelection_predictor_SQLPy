@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A new push supersedes the run already in flight for the same branch.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep every job away from the developer database path and off any
+  # interactive matplotlib backend.
+  MPLBACKEND: Agg
+  PYTHONUTF8: "1"
+
+jobs:
+  # A cheap gate that needs no third-party packages, so a syntax error or a
+  # stray escape sequence reports in seconds rather than after a full install.
+  compile:
+    name: Compile and syntax warnings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Byte-compile every module, warnings as errors
+        run: |
+          shopt -s nullglob
+          python -W error::SyntaxWarning -m py_compile *.py tests/*.py
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        # The suite creates its own throwaway databases; db/elections.db is
+        # gitignored and never exists in a checkout. ELECTIONS_DB is set anyway
+        # so that anything reaching for a default cannot silently find one.
+        env:
+          ELECTIONS_DB: ${{ runner.temp }}/ci-elections.db
+        run: pytest tests/ -q
+
+      - name: Re-measure the House sigmas from the tracked historical CSVs
+        # Not redundant with the suite: this runs the real reporting entry
+        # point, so a change that breaks the printout rather than the
+        # measurement still fails here.
+        run: python backtest_house.py

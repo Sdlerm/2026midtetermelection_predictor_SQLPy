@@ -1,0 +1,3 @@
+# Test-only dependencies. Kept out of requirements.txt so a deployment does not
+# install a test runner.
+pytest==9.1.1
