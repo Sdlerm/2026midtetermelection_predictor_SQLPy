@@ -133,15 +133,25 @@ SIGMA_TOTAL_MARGIN_HOUSE_POLLED = 6.0
 # stale and the sample only reaches one, and the competitive band — the only
 # place a sigma can change a seat — reads consistently above the pooled figure.
 #
-# RE-MEASURED 2026-08-29 after fetch_house_backtest_data.py's party classifier
-# was fixed to split fusion labels ("D/WF", "R/CON", "GOP"). That bug had been
-# scoring 24 genuinely contested districts as uncontested and dropping them —
-# every Oregon seat in all three cycles among them. The corrected sample adds
-# 47 district-cycles (intact 1561 -> 1593, redrawn 1170 -> 1185) and leaves
-# BOTH adopted sigmas where they were: intact SD still 7.19 same-cycle and
-# 7.60 one-cycle-stale, redrawn still ~16.9. The recovered seats are mostly
-# safe ones whose residuals sit in the bulk of the distribution, so the bug
-# was real but not load-bearing for these constants.
+# RE-MEASURED 2026-08-29 after two parsing fixes in
+# fetch_house_backtest_data.py, neither of which moved these constants:
+#
+#   * The party classifier now splits fusion labels ("D/WF", "R/CON", "GOP")
+#     and keeps both halves of a wrapped one ("D(UND)"). It had been scoring
+#     25 genuinely contested districts as uncontested and dropping them —
+#     every Oregon seat in all three cycles, and AK-01 2018, among them.
+#   * Ranked-choice generals are scored on their FINAL round instead of a
+#     first-round sum by party, which had recorded the wrong WINNER in
+#     AK-01 2022 (-0.32 -> +9.93) and ME-02 2018 (-0.82 -> +1.25).
+#
+# Together those add 48 district-cycles (intact 1561 -> 1594, redrawn
+# 1170 -> 1185) and correct four margins. Intact SD reads 7.22 same-cycle and
+# 7.60 one-cycle-stale; redrawn reads ~17.0. So 8.0 and 16.0 stand exactly as
+# adopted. The recovered seats are mostly safe ones sitting in the bulk of the
+# distribution, and the RCV corrections are four districts out of ~2,800
+# district-cycles: both bugs were real, neither was load-bearing HERE. The
+# RCV fix does change what §4's validation table grades against, which is the
+# one place a wrong winner could have flattered the sigma.
 SIGMA_TOTAL_MARGIN_HOUSE_LEAN = math.sqrt(8.0**2 + SIGMA_NATIONAL_MARGIN_HOUSE**2)
 
 # Total error for LEAN-ONLY districts whose LINES HAVE BEEN REDRAWN since the

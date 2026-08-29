@@ -45,7 +45,7 @@ underlying certifications and download without a gate.
     That gap matters and backtest_house.py reports it rather than hiding it:
     see its "what this cannot tell you" section.
 
-FOUR PARSING RULES, ALL OF THEM LOAD-BEARING
+FIVE PARSING RULES, ALL OF THEM LOAD-BEARING
 --------------------------------------------
 1. Fusion voting. In NY and CT a candidate appears on several party lines with
    separate vote counts (Lawler 2022: R 125,738 + CRV 17,812). The workbook
@@ -62,6 +62,16 @@ FOUR PARSING RULES, ALL OF THEM LOAD-BEARING
    full-term contest is the race the lean is trying to predict.
 4. At-large districts. The FEC writes them "00"; 538 writes them "-1". They are
    normalized to "01" here, matching house_ingest._pad.
+5. Ranked-choice generals. ME (from 2018) and AK (from 2022) run RCV, and in a
+   race that goes past round 1 the first-round count is the wrong number:
+   summing it by party treats an eliminated candidate's votes as if they never
+   moved. Three districts in the sample went past round 1, and the 2022
+   workbook publishes the rounds for two of them; the third is hand-entered.
+   See RCV_FINAL.
+
+The party column needs a rule of its own and gets one at _party_tokens: it is
+not a controlled vocabulary of single lines, and matching whole labels against
+a set of them silently drops every fusion candidate.
 """
 
 import csv
@@ -136,11 +146,12 @@ def _party_tokens(labels):
     misses every fusion candidate. Oregon writes every fusion ticket as one
     combined label, which is why EVERY Oregon district fell out of all three
     cycles before this: the district read as uncontested, two_party_margin
-    returned None, and the row was written contested=0. Splitting the labels
-    recovers 24 genuinely contested districts — 2018 {CA-19, CA-32, ND-01,
-    NY-02, OR-01..05, WA-08}, 2020 {AK-01, CT-02, ND-01, NJ-06, OH-07, OR-01,
-    OR-03, OR-04}, 2022 {MI-04, OR-01, OR-04, OR-05, OR-06, PA-15} — and drops
-    the uncontested counts from 52/36/43 to 42/28/37.
+    returned None, and the row was written contested=0. Splitting the labels,
+    and keeping both halves of a wrapped one, recovers 25 genuinely contested
+    districts — 2018 {AK-01, CA-19, CA-32, ND-01, NY-02, OR-01..05, WA-08},
+    2020 {AK-01, CT-02, ND-01, NJ-06, OH-07, OR-01, OR-03, OR-04}, 2022
+    {MI-04, OR-01, OR-04, OR-05, OR-06, PA-15} — and drops the uncontested
+    counts from 52/36/43 to 41/28/37.
 
     Splitting on "/" and stripping the wrappers turns the label into the set
     of lines it actually represents, which is what the caller wants to ask
@@ -157,12 +168,59 @@ def _party_tokens(labels):
             if match:
                 write_in.add(match.group("line").strip().rstrip("*"))
             else:
-                # N(D) and similar designations wrap a line the same way a
-                # write-in does but are a real ballot line, so the wrapper is
-                # stripped and the contents kept.
-                inner = re.match(r"^[A-Z]+\((?P<line>[^)]*)\)$", part)
-                real.add(inner.group("line").strip() if inner else part)
+                # A non-write-in wrapper pairs a ballot line with a
+                # registration qualifier, and the sheets are not consistent
+                # about which half goes outside: Alaska filed Alyse Galvin as
+                # "D(UND)" in 2018 (Democratic nominee, registered undeclared)
+                # and "N(D)/D" in 2020. Only three such labels exist in the
+                # three cycles — D(N), D(UND), N(D) — so rather than guess a
+                # convention, BOTH halves are kept. The qualifiers (N, UND)
+                # are not major-party tokens, so this cannot promote anyone
+                # who is not already on a major line. Keeping only the inner
+                # half, as an earlier pass did, dropped Galvin's 131,199 votes
+                # to other_votes and left AK-01 2018 scored uncontested.
+                inner = re.match(r"^(?P<outer>[A-Z]+)\((?P<line>[^)]*)\)$", part)
+                if inner:
+                    real.add(inner.group("outer").strip())
+                    real.add(inner.group("line").strip())
+                else:
+                    real.add(part)
     return real, write_in
+
+# ---------------------------------------------------------------------------
+# Ranked-choice general elections
+# ---------------------------------------------------------------------------
+# RCV breaks the two-party arithmetic this file otherwise relies on. Summing
+# first-round votes by party treats an eliminated candidate's votes as if they
+# stayed put, which in a race where two candidates of one party split the first
+# round produces a margin whose SIGN is wrong: AK-01 2022 summed Palin (67,866)
+# and Begich (61,513) to 129,379 against Peltola's 128,553 and recorded an R
+# win in a seat Peltola won, and ME-02 2018 recorded -0.82 in a seat Golden won.
+#
+# Two states ran RCV federal generals in these cycles — Maine from 2018 and
+# Alaska from 2022 — but only races where nobody clears 50% in the first round
+# go to later rounds, so the set of AFFECTED districts is much smaller than the
+# set of RCV states. Across 2018/2020/2022 it is exactly three:
+#
+#     ME-02 2018   Golden 142,440 / Poliquin 138,931   (workbook has no rounds)
+#     ME-02 2022   Golden 165,136 / Poliquin 146,142   (workbook round 2)
+#     AK-01 2022   Peltola 137,263 / Palin 112,471     (workbook round 3)
+#
+# The 2022 workbook carries "1ST/2ND/3RD ROUND RCV VOTES" columns, so those two
+# are READ, not typed — see _rcv_final_round. The 2018 and 2020 workbooks have
+# no such columns (2018 has only a Mississippi Senate runoff pair), so ME-02
+# 2018 is the one race in the sample that needs a hand-entered final round.
+# Source: Maine SoS Tabulation of Ranked-Choice Ballots, RCV round 2, the same
+# certified count the FEC's own 2018 narrative cites.
+#
+# Keyed (year, state, district) -> {party: final_round_votes}. A district here
+# REPLACES the summed first-round totals for the two named parties; anything
+# else in the race stays in other_votes, which is what the two-party scale
+# wants. Add an entry only with a citable certified final round.
+RCV_FINAL = {
+    (2018, "ME", "02"): {"D": 142440, "R": 138931},
+}
+
 
 # The FEC sheets carry the five territorial delegates and Puerto Rico's resident
 # commissioner alongside the 435 voting seats. They elect no voting member, 538
@@ -276,16 +334,24 @@ def _download_fec(year, doc, out_dir=OUT_DIR):
     return path
 
 
-def parse_fec_house(path, sheet):
+def parse_fec_house(path, sheet, year=None):
     """
     Parse one FEC House sheet into {(state, district): {...vote totals...}}.
 
-    Implements the four rules in the module docstring. Returns per-district
-    dicts carrying dem/rep/other general-election votes, so the caller can
-    decide what to do about uncontested seats rather than having that decision
-    baked in here.
+    Implements the four rules in the module docstring, plus the ranked-choice
+    rule above. Returns per-district dicts carrying dem/rep/other general-
+    election votes, so the caller can decide what to do about uncontested seats
+    rather than having that decision baked in here.
+
+    `year` selects the RCV_FINAL overrides; it is only needed for cycles whose
+    workbook carries no RCV round columns, and is inferred from the filename
+    when the caller does not pass it.
     """
     import openpyxl
+
+    if year is None:
+        found = re.search(r"(\d{4})", os.path.basename(path))
+        year = int(found.group(1)) if found else None
 
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb[sheet]
@@ -303,6 +369,13 @@ def parse_fec_house(path, sheet):
     # ("(I)", "(I) Incumbent Indicator", "(I) INCUMBENT INDICATOR"), so it is
     # matched on the prefix they share rather than enumerated.
     i_inc = next(i for i, h in enumerate(header) if h.startswith("(I)"))
+
+    # RCV round columns, lowest round first. Present in 2022 only; the earlier
+    # workbooks predate the FEC publishing rounds at all, which is what RCV_FINAL
+    # covers. Ordering by the leading round number rather than by column position
+    # keeps this correct if a later workbook adds a 4th round or reorders them.
+    i_rcv = [i for i, h in enumerate(header) if "ROUND RCV VOTES" in h.upper()]
+    i_rcv.sort(key=lambda i: int(re.match(r"\s*(\d+)", header[i]).group(1)))
 
     # (state, district) -> fec_id -> {"votes": int, "lines": set(party)}
     per_candidate = {}
@@ -343,31 +416,58 @@ def parse_fec_house(path, sheet):
             continue                       # "Unopposed" and friends — see `seen`
 
         slot = per_candidate.setdefault((state, district), {}).setdefault(
-            fec_id, {"votes": 0, "lines": set(), "incumbent": False})
+            fec_id, {"votes": 0, "lines": set(), "incumbent": False, "rcv": None})
         slot["votes"] += votes             # rule 1: sum fusion lines per candidate
         slot["lines"].add(str(row[i_party] or "").strip())
         if str(row[i_inc] or "").strip().upper().startswith("(I)"):
             slot["incumbent"] = True
+        # The candidate's LAST populated round is their final standing. The
+        # workbook spells elimination as an explicit 0 rather than a blank —
+        # Begich's AK-01 2022 row reads 62,505 / 64,499 / 0 — so reading the
+        # last populated cell lands on 0 for everyone knocked out and on the
+        # true final tally for the two who survive, with no elimination logic
+        # of our own. Every cell is blank in a race nobody took past round 1,
+        # which is how a non-RCV district passes through untouched.
+        for i in i_rcv:
+            cell = row[i]
+            if cell in (None, ""):
+                continue
+            try:
+                slot["rcv"] = int(float(cell))
+            except (TypeError, ValueError):
+                pass
 
     out = {key: {"dem_votes": 0, "rep_votes": 0, "other_votes": 0,
                  "incumbent_party": ""} for key in seen}
     for key, candidates in per_candidate.items():
         dem = rep = other = 0
         incumbent = ""
+        # A candidate carrying a final-round tally has one only because the
+        # race went past round 1, so the presence of any such tally in the
+        # district is what marks it ranked-choice.
+        rcv_district = any(info["rcv"] is not None for info in candidates.values())
         for info in candidates.values():
             real, write_in = _party_tokens(info["lines"])
             # A real ballot line decides the candidate. Only if there is none
             # does the write-in wrapper get consulted, and then only to name
             # the party for the incumbent field — the votes still go to other,
             # because a write-in opponent does not make a race contested.
+            # In a ranked-choice district the first-round count is the wrong
+            # number: an eliminated candidate's votes did not stay with their
+            # party, so summing them by party is what flips AK-01 2022's sign.
+            # Only a candidate still standing at the end carries a final-round
+            # tally; everyone eliminated contributes 0 to the two-party totals
+            # and their first-round votes are simply not counted, because those
+            # votes were redistributed into the finalists' tallies already.
+            votes = info["rcv"] or 0 if rcv_district else info["votes"]
             if real & DEM_LINES:
-                dem += info["votes"]
+                dem += votes
                 party = "D"
             elif real & REP_LINES:
-                rep += info["votes"]
+                rep += votes
                 party = "R"
             else:
-                other += info["votes"]
+                other += votes
                 if write_in & DEM_LINES:
                     party = "D"
                 elif write_in & REP_LINES:
@@ -378,6 +478,15 @@ def parse_fec_house(path, sheet):
             # backtest needs — "no incumbent ran", not "the incumbent lost".
             if info["incumbent"]:
                 incumbent = party
+
+        # Cycles whose workbook predates the RCV round columns fall back to the
+        # hand-entered final round. Applied last so it wins over whatever the
+        # first-round sum produced, and only for the parties it names.
+        override = RCV_FINAL.get((year, key[0], key[1]))
+        if override:
+            dem = override.get("D", dem)
+            rep = override.get("R", rep)
+
         out[key] = {"dem_votes": dem, "rep_votes": rep, "other_votes": other,
                     "incumbent_party": incumbent}
     return out
@@ -401,7 +510,7 @@ def fetch_results(out_dir=OUT_DIR):
     written = {}
     for year, doc, sheet in FEC_CYCLES:
         path = _download_fec(year, doc, out_dir)
-        districts = parse_fec_house(path, sheet)
+        districts = parse_fec_house(path, sheet, year)
 
         rows, uncontested = [], 0
         for (state, district) in sorted(districts):
