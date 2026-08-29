@@ -655,7 +655,7 @@ else:
         width="stretch", hide_index=True,
     )
 
-# Flips are only detectable where house_nominees.csv names an incumbent (~83
+# Flips are only detectable where house_nominees.csv names an incumbent (~110
 # districts). Elsewhere the incumbent is unknown, so absence of ⚡ means
 # "unknown", not "hold" — hence the caption rather than a bare flip list.
 house_flips = hdf[hdf["Flip"] == "⚡"]
@@ -708,8 +708,8 @@ else:
         f"end of this box — a centering error, which widening σ would hide rather "
         f"than fix. That measurement split one σ into "
         f"two: **{_n_intact} districts** whose 2022 lines still stand carry "
-        f"σ≈{SIGMA_TOTAL_MARGIN_HOUSE_LEAN:.1f} (the backtest reads 7.2–7.5 on "
-        f"unchanged lines, and ageing a lean costs about a quarter-point per cycle), "
+        f"σ≈{SIGMA_TOTAL_MARGIN_HOUSE_LEAN:.1f} (the backtest reads 7.2–7.6 on "
+        f"unchanged lines, and ageing a lean costs about four-tenths of a point per cycle), "
         f"while the **{_hse_sim['n_lean_redrawn']} districts** in TX/NC/OH/FL redrawn "
         f"in 2025 carry σ≈{SIGMA_TOTAL_MARGIN_HOUSE_LEAN_REDRAWN:.1f} — roughly "
         f"double, because a lean describing boundaries that no longer exist missed by "
@@ -723,7 +723,7 @@ else:
         f"{load_house_sensitivity()} "
         f"One known bias is quantified but uncorrected: an incumbent runs about 3 "
         f"points of margin ahead of their district's lean, and the model has a roster "
-        f"for only ~83 districts, so it cannot apply that correction evenly."
+        f"for only ~110 districts, so it cannot apply that correction evenly."
     )
 
     st.plotly_chart(

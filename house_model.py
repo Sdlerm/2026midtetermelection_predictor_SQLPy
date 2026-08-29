@@ -39,7 +39,7 @@ WHAT TIER 2 STILL DOES NOT DO
     environment term carries a ~2.6pp regression residual on top of everything
     else, which is why SIGMA_NATIONAL_MARGIN_HOUSE is not small.
   * NO INCUMBENCY, and it is now measured. house_nominees.csv names an incumbent
-    in only ~83 districts, so uniform swing is applied to a presidential lean
+    in only ~110 districts, so uniform swing is applied to a presidential lean
     with no incumbency correction. This matters most where it is least visible:
     a well-entrenched incumbent in a district the environment says should flip.
     The lean-only sigma absorbs it as noise; it does not correct for it.
@@ -47,12 +47,12 @@ WHAT TIER 2 STILL DOES NOT DO
     of either party runs ~3 points of margin ahead of their district's lean, and
     ~4-5 points ahead inside the competitive band, while open seats sit near
     zero. Correcting for it would cut the intact-lines sigma from ~7.2 to ~6.6.
-    The blocker is coverage, not method — applying the offset to the ~83
-    rostered districts and not the other ~350 would miscentre them against each
+    The blocker is coverage, not method — applying the offset to the ~110
+    rostered districts and not the other ~325 would miscentre them against each
     other. A full incumbency roster is the cheapest remaining accuracy win in
     this file, and it is a data-collection job.
-  * NO incumbency for unrostered districts. house_nominees.csv covers ~83
-    districts; the other ~350 have no known incumbent, so their flip status is
+  * NO incumbency for unrostered districts. house_nominees.csv covers ~110
+    districts; the other ~325 have no known incumbent, so their flip status is
     unknowable and is reported as False rather than guessed. Seat-count deltas
     against the current chamber are therefore not available here.
 

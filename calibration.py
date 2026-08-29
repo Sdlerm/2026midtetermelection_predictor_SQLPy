@@ -132,6 +132,16 @@ SIGMA_TOTAL_MARGIN_HOUSE_POLLED = 6.0
 # rather than the ~7.4 midpoint for two stated reasons: 2026 is TWO cycles
 # stale and the sample only reaches one, and the competitive band — the only
 # place a sigma can change a seat — reads consistently above the pooled figure.
+#
+# RE-MEASURED 2026-08-29 after fetch_house_backtest_data.py's party classifier
+# was fixed to split fusion labels ("D/WF", "R/CON", "GOP"). That bug had been
+# scoring 24 genuinely contested districts as uncontested and dropping them —
+# every Oregon seat in all three cycles among them. The corrected sample adds
+# 47 district-cycles (intact 1561 -> 1593, redrawn 1170 -> 1185) and leaves
+# BOTH adopted sigmas where they were: intact SD still 7.19 same-cycle and
+# 7.60 one-cycle-stale, redrawn still ~16.9. The recovered seats are mostly
+# safe ones whose residuals sit in the bulk of the distribution, so the bug
+# was real but not load-bearing for these constants.
 SIGMA_TOTAL_MARGIN_HOUSE_LEAN = math.sqrt(8.0**2 + SIGMA_NATIONAL_MARGIN_HOUSE**2)
 
 # Total error for LEAN-ONLY districts whose LINES HAVE BEEN REDRAWN since the
