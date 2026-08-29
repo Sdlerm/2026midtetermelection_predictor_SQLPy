@@ -233,6 +233,14 @@ def _plot_vote_shares(rows, title, out_name):
     # entirely, which is what a candidate with no polling should show.
     d_errs = [_bar_stderr(row[2]["stderr"]) for row in rows]
     r_errs = [_bar_stderr(row[3]["stderr"]) for row in rows]
+    # NaN is the right value to hand matplotlib (it draws nothing) and the
+    # wrong one for arithmetic: max() returns NaN whenever a NaN is the first
+    # value it sees, and the int(... // 10) that sets the x-ticks then raises.
+    # These finite twins carry the geometry — label offsets and axis extent —
+    # while the lists above still carry the NaN to the bars themselves, so a
+    # race with no polling gets no error bar and a correctly sized axis.
+    d_pads = [0.0 if math.isnan(e) else e for e in d_errs]
+    r_pads = [0.0 if math.isnan(e) else e for e in r_errs]
     y = range(len(rows))
     # Bars are 0.36 tall on centres 0.40 apart, leaving a ~2px surface gap
     # between the pair at the 0.42 in/row this figure is sized to.
@@ -254,14 +262,14 @@ def _plot_vote_shares(rows, title, out_name):
     # number already carries party identity. Placed past the error bar rather
     # than with bar_label's bar-relative padding, which puts short-bar labels
     # underneath their own error whisker.
-    for i, (pct, err) in enumerate(zip(d_pcts, d_errs)):
+    for i, (pct, err) in enumerate(zip(d_pcts, d_pads)):
         ax.text(pct + err + 1.4, i - offset, f"{pct:.1f}", va="center", ha="left",
                 fontsize=7, color="#444444")
-    for i, (pct, err) in enumerate(zip(r_pcts, r_errs)):
+    for i, (pct, err) in enumerate(zip(r_pcts, r_pads)):
         ax.text(pct + err + 1.4, i + offset, f"{pct:.1f}", va="center", ha="left",
                 fontsize=7, color="#444444")
 
-    max_extent = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_errs + r_errs))
+    max_extent = max(pct + err for pct, err in zip(d_pcts + r_pcts, d_pads + r_pads))
     flip_x = max_extent + 5.5
     for i, (_, d_key, d_info, r_info, margin) in enumerate(rows):
         if not (d_info.get("is_flip", False) or r_info.get("is_flip", False)):

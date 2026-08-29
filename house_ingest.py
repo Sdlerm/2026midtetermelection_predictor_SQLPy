@@ -69,6 +69,14 @@ def _build_district_tokens(roster):
 
 
 def load_house_polls(filepath=_HOUSE_POLLS_PATH, year=2026):
+    """Replace the 2026 House poll data in the DB with the contents of `filepath`.
+
+    DESTRUCTIVE, but only after the input is known good: every read, filter
+    and dedup below runs before the wipe, and the wipe shares one transaction
+    with the inserts. A missing or malformed house.csv therefore raises with
+    the existing rows untouched, rather than emptying the table and then
+    failing on the read.
+    """
     roster, skipped_nominees = load_house_nominees()
     rostered_districts = {(s, d) for (s, d, _p) in roster}
 
@@ -140,6 +148,26 @@ def load_house_polls(filepath=_HOUSE_POLLS_PATH, year=2026):
 
     con = get_connection()
     cur = con.cursor()
+
+    # Wipe ONLY 2026 House rows: district != '' is the House half of the
+    # partition (the Senate wipe owns district = ''). Plain English: "delete
+    # polls and candidates belonging to 2026 races that have a district
+    # value, then those races themselves" — a Senate refresh can't touch
+    # these, and this can't touch Senate.
+    #
+    # This sits here, not in __main__ ahead of the call, for two reasons:
+    # everything that can reject a bad house.csv has already run by this
+    # line, and sqlite3's implicit transaction means the single commit below
+    # covers the deletes too — so a crash part-way through the insert loop
+    # rolls the wipe back with it instead of leaving the table empty.
+    cleared = cur.execute(
+        "SELECT COUNT(*) FROM races WHERE year = 2026 AND district != ''"
+    ).fetchone()[0]
+    cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
+    cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
+    cur.execute("DELETE FROM races WHERE year = 2026 AND district != ''")
+    print(f"Cleared {cleared} 2026 House race(s) and their polls.")
+
     loaded = 0
     for _, row in df.iterrows():
         pollster_id  = upsert_pollster(cur, str(row["pollster"]).strip(),
@@ -172,18 +200,9 @@ def load_house_polls(filepath=_HOUSE_POLLS_PATH, year=2026):
 
 
 if __name__ == "__main__":
-    con = get_connection()
-    cur = con.cursor()
-    # Wipe ONLY 2026 House rows: district != '' is the House half of the
-    # partition (Senate wipe owns district = ''). Plain English: "delete polls
-    # and candidates belonging to 2026 races that have a district value, then
-    # those races themselves" — a Senate refresh can't touch these, and this
-    # can't touch Senate.
-    cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
-    cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
-    cur.execute("DELETE FROM races WHERE year = 2026 AND district != ''")
-    con.commit()
-    con.close()
-    print("Cleared 2026 House poll data.")
-
-    load_house_polls()
+    # The wipe lives inside load_house_polls, in the same transaction as the
+    # inserts. This check only buys a readable message instead of a traceback.
+    if not os.path.exists(_HOUSE_POLLS_PATH):
+        print(f"ERROR: {_HOUSE_POLLS_PATH} not found. Download it manually and place it in data/")
+    else:
+        load_house_polls()
