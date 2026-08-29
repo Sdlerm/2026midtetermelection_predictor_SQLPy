@@ -384,10 +384,10 @@ projected = base_projection
 ```
 
 -   `party_direction`: +1 for D, -1 for R
--   `ECON_WEIGHT`: currently **0.20** → maximum economic adjustment ±2 points
--   `APPROVAL_WEIGHT`: currently **0.06** → maximum approval adjustment ±0.6 points
+-   `ECON_WEIGHT`: currently **0.26** → maximum economic adjustment ±2.6 points
+-   `APPROVAL_WEIGHT`: currently **0.11** → maximum approval adjustment ±1.1 points
 
-Races where the finalists land within `TOSSUP_THRESHOLD_PP` (1.1 points) of each other are flagged as toss-ups.
+Races where the finalists land within `TOSSUP_THRESHOLD_PP` (1.2 points) of each other are flagged as toss-ups.
 
 ---
 
@@ -432,19 +432,19 @@ Blend between polls (0.788) and structural lean (0.212). Higher = more weight to
 
 `senate_model.py`
 
-Economic climate influence. Currently `0.20` (max ±2 pts). 0 = no economic adjustment.
+Economic climate influence. Currently `0.26` (max ±2.6 pts). 0 = no economic adjustment.
 
 `APPROVAL_WEIGHT`
 
 `senate_model.py`
 
-Presidential approval influence. Currently `0.06` (max ±0.6 pts).
+Presidential approval influence. Currently `0.11` (max ±1.1 pts).
 
 `TOSSUP_THRESHOLD_PP`
 
 `senate_model.py`
 
-Margin (1.1 pts) inside which a race is flagged as a toss-up.
+Margin (1.2 pts) inside which a race is flagged as a toss-up.
 
 `INDICATOR_RANGES`
 

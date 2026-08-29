@@ -10,7 +10,12 @@ load_dotenv()
 API_KEY = os.getenv("FRED_API_KEY")
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 YEAR = 2026
-LAMBDA = 0.03  # same recency decay as senate_model.py
+LAMBDA = 0.03  # approval-poll recency decay (half-life ~23 days). NOT the same as
+               # senate_model.LAMBDA (0.0231, ~30 days) — the comment here claimed a
+               # parity that has not held since senate_model was retuned. Whether the
+               # two SHOULD match is an open modeling question rather than a typo:
+               # changing this value moves the approval score and every projection
+               # that reads it, so it stays where it was measured until backtested.
 
 # Series ID → factor name in our DB
 # Each chosen for documented correlation with midterm incumbent party performance
