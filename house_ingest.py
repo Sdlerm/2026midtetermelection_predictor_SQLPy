@@ -13,6 +13,21 @@ def _pad(district):
     return f"{int(float(district)):02d}"
 
 
+def _split_names(cell):
+    """Split a nominee cell into names on SEMICOLONS ONLY.
+
+    Not commas: real names in this file carry them ("Victor Aguilar, Jr."), and
+    several nominee cells use a comma to list unresolved primary contenders as
+    one opaque string. Semicolon is already the file's list separator — see the
+    dem_candidates_seen / rep_candidates_seen columns — so it is the one
+    delimiter that can be given meaning here without reinterpreting existing
+    rows.
+    """
+    if pd.isna(cell):
+        return []
+    return [n.strip() for n in str(cell).split(";") if n.strip()]
+
+
 def load_house_nominees(path=_HOUSE_NOMINEES_PATH):
     """
     Read the wide-format nominees file and reshape to the long dict shape the
@@ -22,6 +37,25 @@ def load_house_nominees(path=_HOUSE_NOMINEES_PATH):
     filled (Samuel's rule, 2026-07-17). Everything else is returned in
     `skipped` with a reason, for the end-of-run summary. The CSV itself is
     scripture — this function adapts, never edits.
+
+    SAME-PARTY GENERALS are the documented exception to the both-sides rule.
+    California and Washington run a top-two primary, so a safe district can send
+    two candidates of the SAME party to the general — CA-07 is Doris Matsui vs.
+    Mai Vang, both Democrats. Such a row has an empty opposing column, which
+    read as "one side unsettled" and got the district skipped entirely; the
+    lean-only pass in house_model then rebuilt it as a generic-D-vs-generic-R
+    contest that does not exist, and the Monte Carlo simulated uncertainty over
+    a seat whose PARTY is already decided.
+
+    The row declares itself with same_party_general = D or R, and puts both
+    finalists in that party's nominee column separated by "; ", INCUMBENT FIRST
+    when the party's incumbent flag is set (that ordering is the only thing
+    telling the two apart, since one flag covers the pair). It rosters as a
+    single entry carrying `same_party_general` and the other finalist(s) in
+    `also` — one entry, because (state, district, party) is the roster's key and
+    two Democrats would collide on it. Downstream this is a LOCKED seat: certain
+    for the party, unmodeled between the people, since nothing in this repo
+    measures a Matsui-vs-Vang split.
     """
     df = pd.read_csv(path)
     roster, skipped = {}, []
@@ -34,6 +68,29 @@ def load_house_nominees(path=_HOUSE_NOMINEES_PATH):
         dem = str(row["dem_nominee"]).strip() if pd.notna(row["dem_nominee"]) else ""
         rep = str(row["rep_nominee"]).strip() if pd.notna(row["rep_nominee"]) else ""
 
+        dem_inc = pd.notna(row.get("dem_incumbent")) and str(row["dem_incumbent"]).strip() not in ("", "0")
+        rep_inc = pd.notna(row.get("rep_incumbent")) and str(row["rep_incumbent"]).strip() not in ("", "0")
+
+        same = row.get("same_party_general")
+        same = str(same).strip().upper() if pd.notna(same) else ""
+        if same:
+            if same not in ("D", "R"):
+                skipped.append((key, f"same_party_general must be D or R, got {same!r}"))
+                continue
+            names = _split_names(dem if same == "D" else rep)
+            if len(names) < 2:
+                skipped.append((key, f"same-party general needs both finalists in the "
+                                     f"{'dem' if same == 'D' else 'rep'}_nominee column, "
+                                     f'separated by ";"'))
+                continue
+            roster[(state, district, same)] = {
+                "name": names[0],
+                "is_incumbent": dem_inc if same == "D" else rep_inc,
+                "same_party_general": True,
+                "also": names[1:],
+            }
+            continue
+
         if not dem and not rep:
             skipped.append((key, "no nominees yet"))
             continue
@@ -41,11 +98,6 @@ def load_house_nominees(path=_HOUSE_NOMINEES_PATH):
             skipped.append((key, "one side unsettled"))
             continue
 
-        roster[(state, district, "D")] = {"name": dem}
-        roster[(state, district, "R")] = {"name": rep}
-
-        dem_inc = pd.notna(row.get("dem_incumbent")) and str(row["dem_incumbent"]).strip() not in ("", "0")
-        rep_inc = pd.notna(row.get("rep_incumbent")) and str(row["rep_incumbent"]).strip() not in ("", "0")
         roster[(state, district, "D")] = {"name": dem, "is_incumbent": dem_inc}
         roster[(state, district, "R")] = {"name": rep, "is_incumbent": rep_inc}
 
@@ -62,9 +114,14 @@ def _build_district_tokens(roster):
     tokens = {}
     for (state, district, _party), info in roster.items():
         bucket = tokens.setdefault((state, district), set())
-        for tok in info["name"].lower().split():
-            if len(tok) > 2:
-                bucket.add(tok)
+        # `also` carries the extra finalists of a same-party general, which
+        # share one roster entry. They have to contribute tokens too, or the
+        # block scorer would rate a CA-07 question that names both Democrats
+        # no higher than one that names Matsui alone.
+        for name in (info["name"], *info.get("also", ())):
+            for tok in name.lower().split():
+                if len(tok) > 2:
+                    bucket.add(tok)
     return tokens
 
 

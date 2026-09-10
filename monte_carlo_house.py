@@ -83,12 +83,19 @@ def build_races(predictions):
     here, not just display flags.
     Districts where we can't form a two-sided margin are skipped and reported.
     """
+    locked = locked_districts(predictions)
+
     by_race = {}
     for row in predictions:
         by_race.setdefault(row["race"], []).append(row)
 
     races, skipped = [], []
     for race in sorted(by_race):
+        if race in locked:
+            # Decided, not missing. It has no D-vs-R margin and never will, so
+            # it is not simulated and must not be reported as a data gap — it
+            # goes to baseline_seats() instead.
+            continue
         rows = by_race[race]
         dem = next((r for r in rows if r["party"] == "D"), None)
         rep = next((r for r in rows if r["party"] == "R"), None)
@@ -119,29 +126,56 @@ def build_races(predictions):
 # ---------------------------------------------------------------------
 # Step 2: baseline seats
 # ---------------------------------------------------------------------
-def baseline_seats(races):
+def locked_districts(predictions):
+    """
+    Districts decided before a single simulation runs: {race: party}.
+
+    A top-two state can send two candidates of the SAME party to the general
+    (CA-07: Matsui vs. Vang, both Democrats). house_model.py flags those rows
+    same_party_general and gives them no margin, because a D-minus-R margin is
+    not a meaningful quantity in a race with no R. The seat is certain for the
+    party; only the person is open.
+    """
+    return {row["race"]: row["party"]
+            for row in predictions if row.get("same_party_general")}
+
+
+def baseline_seats(predictions, races):
     """
     Seats held REGARDLESS of the simulated districts.
 
-    For the House this is always (0, 0): every seat is up every cycle and
-    house_model.py projects all 435, so there is no "not up" or "unmodeled"
-    remainder for a baseline to carry. The Senate needs this function because
-    only ~35 of its 100 seats are on the ballot.
+    Usually (0, 0): every House seat is up every cycle and house_model.py
+    projects all 435, so there is normally no "not up" remainder for a baseline
+    to carry. The Senate needs this function because only ~35 of its 100 seats
+    are on the ballot.
 
-    The function exists anyway — for the seat-math check. If the district count
-    ever drifts from 435 (a roster gap, a skipped district, a duplicate race
-    key), the totals would silently stop summing to a chamber and every
-    probability would be quietly wrong. This is where that gets caught.
+    Same-party generals are the exception, and they are exactly what a baseline
+    is for — a seat whose party is settled before the simulation, carried into
+    every simulated election unchanged rather than drawn. Simulating one instead
+    would be the real error: it would put error bars on a decided seat, and it
+    could only do so by inventing an opponent for it to be uncertain against.
+    That is what happened to CA-07 before same_party_general existed — the
+    district fell through to the lean-only path and was simulated as a generic
+    Democrat against a generic Republican who is not on the ballot.
 
-    It RAISES rather than warns, matching monte_carlo_senate.baseline_seats: a
-    P(majority) computed over the wrong number of seats is not a degraded
-    forecast, it is a false one, and 218 means nothing against a chamber that
-    isn't 435. Refusing to return beats returning something unusable.
+    The signature now matches monte_carlo_senate.baseline_seats(predictions,
+    races): both chambers derive their baseline from the predictions and check
+    it against what is being simulated.
+
+    It RAISES rather than warns, matching the Senate: a P(majority) computed
+    over the wrong number of seats is not a degraded forecast, it is a false
+    one, and 218 means nothing against a chamber that isn't 435. Refusing to
+    return beats returning something unusable.
     """
-    n = len(races)
+    locked = locked_districts(predictions)
+    base_d = sum(1 for p in locked.values() if p == "D")
+    base_r = sum(1 for p in locked.values() if p == "R")
+
+    n = len(races) + len(locked)
     if n != N_HOUSE_SEATS:
         raise ValueError(
-            f"House seat identity violated: {n} simulated districts, expected "
+            f"House seat identity violated: {len(races)} simulated districts + "
+            f"{len(locked)} decided (same-party general) = {n}, expected "
             f"{N_HOUSE_SEATS}.\n"
             f"P(majority) is measured against the {HOUSE_MAJORITY}-seat "
             f"threshold, which is only meaningful for a full {N_HOUSE_SEATS}-"
@@ -151,7 +185,7 @@ def baseline_seats(races):
             f"which defines the district universe (re-run "
             f"fetch_district_lean.py); or duplicate race keys collapsing rows."
         )
-    return 0, 0
+    return base_d, base_r
 
 
 # ---------------------------------------------------------------------
@@ -349,15 +383,20 @@ def _seat_sd(dist):
 if __name__ == "__main__":
     predictions, climate, approval = predict_house_races()
     races = build_races(predictions)
-    base_d, base_r = baseline_seats(races)
+    base_d, base_r = baseline_seats(predictions, races)
 
     results = simulate(races, base_d, base_r)
 
+    locked = locked_districts(predictions)
     print(f"\nMonte Carlo — {results['n_sims']:,} simulated elections")
-    print(f"Districts: {len(races)}  "
+    print(f"Districts: {len(races)} simulated  "
           f"({results['n_polled']} polled, {results['n_lean_only']} lean-only, "
           f"of which {results['n_lean_redrawn']} on redrawn lines — marked "
-          f"'lean*' below and drawing double sigma)\n")
+          f"'lean*' below and drawing double sigma)")
+    if locked:
+        print(f"           {len(locked)} decided, not simulated "
+              f"(same-party general: {', '.join(f'{k} {v}' for k, v in sorted(locked.items()))})")
+    print()
 
     # Itemize only the competitive districts. Printing 435 win-probability bars
     # would bury the ~40 that decide the chamber under 390 that read 0% or 100%.

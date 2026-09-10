@@ -1,4 +1,4 @@
-state,district,dem_nominee,rep_nominee,ind_nominee,dem_incumbent,rep_incumbent,dem_candidates_seen,rep_candidates_seen,notes
+state,district,dem_nominee,rep_nominee,ind_nominee,dem_incumbent,rep_incumbent,dem_candidates_seen,rep_candidates_seen,notes,same_party_general
 AK,1,John Williams,Nick Begich,,,1,John Williams; Mary S. Peltola; Matt Schultz,Nick Begich,
 AL,2,Shomari Figures,Rhett Marques,,1,,
 AR,2,Chris Jones,French Hill,,,1
@@ -7,6 +7,7 @@ AZ,2,Jonathan Nez,Eli Crane,Curtis Goodwin,,1
 AZ,6,JoAnna Mendonza,Juan Ciscomani,,,1,JoAnna Mendonza,Juan Ciscomani,
 CA,3,Richard Pan,Kevin Kiley,,,1
 CA,6,Ami Bera,Rob Tucker,,1.0,,Heidi Hall,Kevin Kiley,
+CA,7,Doris Matsui; Mai Vang,,,1,,,,top-two: both finalists are Democrats,D
 CA,11,"Connie Chan, Scott Wiener",Dena Maldonado,,1.0,,,,
 CA,14,"Aisha Wahab, Melissa Hernandez",Wendy Huang,,1.0,,"Aisha Wahab; Carin Elam; Matt Ortega; Melissa Hernandez; Rakhi Israni; Victor Aguilar, Jr.",Dena Maldonado; Wendy Huang,
 CA,22,Randy Villegas,David G. Valadao,,,1,Jasmeet Bains,David G. Valadao,
@@ -22,9 +23,12 @@ FL,1,Gay Valimont,Jimmy Patronis,,,1
 FL,2,Lauren Donahoo,Jay Trumbell,,,1,,,
 FL,7,Bale Dalton,Ryan Elijah,,,1
 FL,8,Jennifer Jenkins,Mike Haridopolos,,,1
+FL,9,Darren Soto,Dan Green,,1
 FL,11,Joe Strada,James Pericola,,,1
 FL,13,Leela Gray,Anna Paulina Luna,,,1,Leela Gray,Anna Paulina Luna,
 FL,14,Kathy Castor,Mike Beltran,,1,
+FL,16,Kelly Kirschner ,"Sydney
+Gruters 	",,,1
 FL,19,Victor Arias,Jim Schwartzel,,,1,,,
 FL,20,Debbie Wasserman Schultz,Brent Anderson,,1,,,,
 FL,22,Pia Dandiya,Casey Askar,,1
@@ -40,6 +44,7 @@ IA,3,Sarah Trone Garriott,Zach Nunn,,,1,Jennifer Konfrst; Sarah Trone Garriott,Z
 ID,1,Kaylee Peterson,Ross Fulcher,,,1
 IL,4,Raymond Lopez,Robert Cruz,,1
 IN,5,Deborah Pickett,Victoria Spartz,,,1
+KY,3,Morgan McGarvey,Maria Rodriguez	,,1,,
 KY,4,Melissa Claire Strange,Ed Gallrhein,,,1,,,
 KY,6,Todd Kelly,Andy Barr,,,1
 MA,6,Dan Koh,Micah Jones,,1.0,,Beth Andres-Beck; Dan Koh; Jamie Belsito; John Beccia; Mariah Lancaster; Tram Nguyen,,primary
@@ -98,6 +103,7 @@ TX,18,Sylvester Turner,Lana Centonze,,1
 TX,23,Katy Padilla Stout,Brandon Herrera,,,1,Katy Padilla Stout,Brandon Herrera,
 TX,28,Henry Cuellar,Jay Furman,,1
 TX,34,Vicente Gonzalez,Eric Flores,,1.0,,Vicente Gonzalez,Eric Flores,
+TX,35,Johnny Garcia	,Carlos De La Cruz,,,1
 UT,1,Ben McAdams,Riley Owen,,,1,Ben McAdams; Eva Lopez Chavez; Kathleen Riebe; Liban Mohamed; Luis Villarreal; Michael Farrell; Nate Blouin,,primary
 UT,2,Peter Crosby,Blake D. Moore,,,1,,Blake D. Moore; Colton Hatch; Karianne Lisonbee,primary
 VA,1,Shannon Taylor,Robert J. Wittman,,,1,Shannon Taylor,Robert J. Wittman,

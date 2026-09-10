@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     predictions, _climate, _approval = predict_house_races()
     races = build_races(predictions)
-    base_d, base_r = baseline_seats(races)
+    base_d, base_r = baseline_seats(predictions, races)
 
     sens = majority_sensitivity(races, base_d, base_r, shift_share_pts=1.0)
     print(format_caveat(sens))

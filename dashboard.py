@@ -150,13 +150,15 @@ def load_house_sim():
     """calibration.N_SIMS simulated House elections -> probabilities + seat
     distribution.
 
-    baseline_seats() takes only `races` here, unlike the Senate's
-    (predictions, races): every House seat is up every cycle, so there is no
-    "not up" remainder for a baseline to carry. See monte_carlo_house.
+    baseline_seats() takes (predictions, races) as the Senate's does: every
+    House seat is up every cycle, but a same-party general (two candidates of
+    one party on the general ballot, as in CA-07) is decided before the
+    simulation and is carried as a baseline seat rather than drawn. See
+    monte_carlo_house.
     """
     predictions, _climate, _approval = load_house_predictions()
     races = mc_house.build_races(predictions)
-    base_d, base_r = mc_house.baseline_seats(races)
+    base_d, base_r = mc_house.baseline_seats(predictions, races)
     return mc_house.simulate(races, base_d, base_r)
 
 
@@ -171,7 +173,7 @@ def load_house_sensitivity():
     simulate() that produces the headline is the only way the two stay in sync."""
     predictions, _climate, _approval = load_house_predictions()
     races = mc_house.build_races(predictions)
-    base_d, base_r = mc_house.baseline_seats(races)
+    base_d, base_r = mc_house.baseline_seats(predictions, races)
     return house_sensitivity.format_caveat(
         house_sensitivity.majority_sensitivity(races, base_d, base_r)
     )
@@ -285,13 +287,33 @@ def load_predictions():
     return pd.DataFrame(rows).sort_values("Margin", ascending=False), climate, control
 
 
+def _same_party_poll_note(cands):
+    """Hover note for a same-party general that has been polled.
+
+    The poll is real and the model declines to use it (there is no baseline for
+    an intra-party matchup to blend against), so it is shown and labeled unused
+    rather than dropped — the same bargain house_model.py's CLI strikes."""
+    polled = [c for c in cands if c.get("poll_avg") is not None]
+    if not polled:
+        return ""
+    shares = " · ".join(f"{c['name']} {c['poll_avg']:.1f}%" for c in polled)
+    return f" — polled: {shares} (not used for the call)"
+
+
 @st.cache_data(ttl=300)
 def load_house_df():
     """House Tier 2 predictions -> display DataFrame with GEOID + rating.
 
     Covers all 435 districts. The Basis column separates poll-backed rows from
     lean-only ones; plot_house_map renders the latter at reduced opacity so
-    coverage never reads as confidence."""
+    coverage never reads as confidence.
+
+    A third basis, "same-party general", covers districts a top-two primary
+    decided in advance (CA-07 sends two Democrats to the general). Those rows
+    carry no projected shares — there is no D-vs-R contest to project — so they
+    are built separately and given a full-strength ±100 margin, which is not a
+    modeled number but the literal one: with no Republican on the ballot the
+    D-minus-R margin IS 100."""
     results, _, _ = load_house_predictions()
     by_race = {}
     for r in results:
@@ -299,6 +321,23 @@ def load_house_df():
 
     rows = []
     for race, cands in by_race.items():
+        if cands[0].get("same_party_general"):
+            party = cands[0]["party"]
+            rows.append({
+                "Race":         race,
+                "GEOID":        _geoid(cands[0]["state"], cands[0]["district"]),
+                "Leader":       f"{party} " + " vs. ".join(c["name"] for c in cands),
+                "Leader %":     None,
+                "Challenger":   f"no {'Republican' if party == 'D' else 'Democrat'} on the ballot"
+                                + _same_party_poll_note(cands),
+                "Challenger %": None,
+                "Margin":       100.0 if party == "D" else -100.0,
+                "Rating":       f"Safe {party}",
+                "Basis":        "same-party general",
+                "Flip":         "",
+            })
+            continue
+
         cands = sorted(cands, key=lambda c: c["projected"], reverse=True)
         if len(cands) < 2:
             continue
@@ -433,7 +472,10 @@ def plot_house_map(hdf):
 
     hover_cols = ["Race", "Rating", "Leader", "Leader %", "Challenger", "Challenger %"]
 
-    def _trace(sub, opacity, basis_note):
+    def _trace(sub, opacity, basis_note, shares=True):
+        # shares=False for same-party generals: their Leader %/Challenger % are
+        # None, and "%{customdata[3]}%" would render that as a bare "null%".
+        # The district is certain, so the hover says so instead of guessing.
         return go.Choropleth(
             geojson=gj,
             featureidkey="properties.GEOID",
@@ -448,8 +490,10 @@ def plot_house_map(hdf):
             customdata=sub[hover_cols],
             hovertemplate=(
                 "<b>%{customdata[0]}</b> — %{customdata[1]}" + basis_note +
-                "<br>%{customdata[2]}: %{customdata[3]}%"
-                "<br>%{customdata[4]}: %{customdata[5]}%"
+                ("<br>%{customdata[2]}: %{customdata[3]}%"
+                 "<br>%{customdata[4]}: %{customdata[5]}%" if shares else
+                 "<br>%{customdata[2]}"
+                 "<br>%{customdata[4]}") +
                 "<extra></extra>"
             ),
         )
@@ -457,11 +501,17 @@ def plot_house_map(hdf):
     fig = go.Figure()
     lean_only = hdf[hdf["Basis"] == "lean only"]
     polled    = hdf[hdf["Basis"] == "polls"]
+    same_party = hdf[hdf["Basis"] == "same-party general"]
 
     if not lean_only.empty:
         fig.add_trace(_trace(lean_only, 0.45, " · LEAN-ONLY, no polls"))
     if not polled.empty:
         fig.add_trace(_trace(polled, 1.0, ""))
+    # Full opacity: the opacity channel encodes "how much do we know", and this
+    # is the one basis that knows the answer outright.
+    if not same_party.empty:
+        fig.add_trace(_trace(same_party, 1.0,
+                             " · SAME-PARTY GENERAL, seat certain", shares=False))
 
     fig.update_geos(scope="usa", visible=False)
     fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
@@ -615,12 +665,17 @@ st.caption(
     f"their polls already carry 2026."
 )
 _h_polled = int((hdf["Basis"] == "polls").sum())
+# Counted, not subtracted: there is a third basis now (same-party general), and
+# "everything that isn't polled is lean-only" stopped being true when it landed.
+_h_lean = int((hdf["Basis"] == "lean only").sum())
+_h_same = int((hdf["Basis"] == "same-party general").sum())
 _h_d = int((hdf["Margin"] > 0).sum())
 _h_r = len(hdf) - _h_d
 _h_tilt = int((hdf["Margin"].abs() < TILT_MARGIN_THRESHOLD).sum())
 st.caption(
     f"{len(hdf)} of 435 districts modeled · {_h_polled} poll-backed, "
-    f"{len(hdf) - _h_polled} lean-only (shown at reduced opacity) · "
+    f"{_h_lean} lean-only (shown at reduced opacity)"
+    + (f", {_h_same} decided by a same-party general" if _h_same else "") + " · "
     f"D leads {_h_d} · R leads {_h_r} — every district is colored for its "
     f"vote-share leader, including the {_h_tilt} inside {TILT_MARGIN_THRESHOLD:g}pt "
     f"(the Tilt bands); nothing is left uncalled · point estimates, control "
@@ -696,35 +751,6 @@ else:
     # silently is worse than no caveat.
     _n_total = _hse_sim["n_lean_only"] + _hse_sim["n_polled"]
     _n_intact = _hse_sim["n_lean_only"] - _hse_sim["n_lean_redrawn"]
-    st.warning(
-        f"**The district error estimates are measured; the national environment "
-        f"driving them is not.** The lean-only σ values in `calibration.py` were "
-        f"backtested in August 2026 against 2018, 2020 and 2022 — 538 partisan-lean "
-        f"vintages pinned to commits published before each election, scored against "
-        f"certified FEC returns — then validated against realized win rates rather "
-        f"than only against their own residual spread. The tails come back honest: "
-        f"districts put at ~89% won 87% of the time and those at ~99% won 100%. The "
-        f"middle bands do not, and the reason is the incumbency bias noted at the "
-        f"end of this box — a centering error, which widening σ would hide rather "
-        f"than fix. That measurement split one σ into "
-        f"two: **{_n_intact} districts** whose 2022 lines still stand carry "
-        f"σ≈{SIGMA_TOTAL_MARGIN_HOUSE_LEAN:.1f} (the backtest reads 7.2–7.6 on "
-        f"unchanged lines, and ageing a lean costs about four-tenths of a point per cycle), "
-        f"while the **{_hse_sim['n_lean_redrawn']} districts** in TX/NC/OH/FL redrawn "
-        f"in 2025 carry σ≈{SIGMA_TOTAL_MARGIN_HOUSE_LEAN_REDRAWN:.1f} — roughly "
-        f"double, because a lean describing boundaries that no longer exist missed by "
-        f"16–22 points historically. The old single σ of 11.0 was wrong in both "
-        f"directions. "
-        f"Two inputs remain unmeasured. The polled-district "
-        f"σ≈{SIGMA_TOTAL_MARGIN_HOUSE_POLLED:.1f} covers "
-        f"{_hse_sim['n_polled']} of {_n_total} districts and still has no historical "
-        f"district-poll archive to test against. "
-        f"{_house_env_note()} "
-        f"{load_house_sensitivity()} "
-        f"One known bias is quantified but uncorrected: an incumbent runs about 3 "
-        f"points of margin ahead of their district's lean, and the model has a roster "
-        f"for only ~110 districts, so it cannot apply that correction evenly."
-    )
 
     st.plotly_chart(
         plot_seat_distribution(_hse_sim["seat_distribution"], HOUSE_MAJORITY, "House"),

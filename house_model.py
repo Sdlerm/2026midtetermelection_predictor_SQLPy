@@ -312,8 +312,87 @@ def predict_house_races(year=2026):
     )
     races = cur.fetchall()
 
+    # ---- Same-party generals: LOCKED seats, projected by neither path -------
+    # A top-two state can put two candidates of one party in the general (CA-07:
+    # Matsui vs. Vang, both D). The seat's PARTY is then decided before any
+    # model runs, and the two mechanisms this file offers are both wrong for it:
+    # a lean is a D-minus-R quantity and says nothing about which Democrat wins,
+    # and polls of the pair are an intra-party split this repo has no method for.
+    # So these districts are emitted here, once, as rows that assert the party
+    # and decline the matchup — projected/lean/margin are None because no number
+    # is known, not because one is missing. Emitting them FIRST also removes
+    # them from both passes below: the polled loop skips them explicitly, and
+    # the lean-only pass skips anything already in `results`.
+    locked = {(s, d): p for (s, d, p), info in roster.items()
+              if info.get("same_party_general")}
+
+    race_ids = {(s, d): rid for rid, s, d in races}
+
     results = []
+    for (state, district), party in sorted(locked.items()):
+        info = roster[(state, district, party)]
+        finalists = [info["name"], *info.get("also", ())]
+
+        # Polls of an intra-party general DO exist — CA-07 has one (Data for
+        # Progress, 2026-08-21: Vang 32, Matsui 28, 40 undecided). They are
+        # carried for DISPLAY and go no further; `projected` stays None.
+        # Turning them into a projection would need a baseline to blend
+        # against, and the only baseline this file has is a D-minus-R lean,
+        # which is silent on which Democrat wins. Reporting the number while
+        # declining to call the race is the honest half of that: the poll is
+        # real information about the people, and none about the seat.
+        polls = {}
+        race_id = race_ids.get((state, district))
+        if race_id is not None:
+            cand_ids = {}
+            for name in finalists:
+                cur.execute(
+                    "SELECT id FROM candidates WHERE race_id = ? AND name = ?",
+                    (race_id, name),
+                )
+                row = cur.fetchone()
+                if row:
+                    cand_ids[name] = row[0]
+            blocks = matched_poll_blocks(race_id, list(cand_ids.values()))
+            for name, cid in cand_ids.items():
+                avg, err = weighted_average_and_stderr(race_id, cid, blocks=blocks)
+                if avg is not None:
+                    polls[name] = (avg, err)
+
+        for i, name in enumerate(finalists):
+            poll_avg, poll_stderr = polls.get(name, (None, None))
+            results.append({
+                "state": state, "district": district,
+                "race": f"{state}-{district}",
+                "name": name, "party": party,
+                "poll_avg": poll_avg, "env": env, "env_source": env_source,
+                "lean": None,
+                "projected": None,
+                "poll_stderr": poll_stderr,
+                # False even when poll_avg is set: this flag means "has a
+                # poll-BASED PROJECTION", which is what selects a sigma in
+                # monte_carlo_house and the Basis label on the dashboard. There
+                # is no projection here, only a reported average.
+                "has_polls": False,
+                "lean_redrawn": lean_geometry_is_stale(state, district, lean_sources),
+                # One incumbent flag covers the pair, so the roster's ordering
+                # rule (incumbent listed first) is what assigns it.
+                "is_incumbent": bool(info.get("is_incumbent")) and i == 0,
+                "incumbent_party": party if info.get("is_incumbent") else "",
+                "incumbent_known": bool(info.get("is_incumbent")),
+                # The flag every consumer keys on. `winner` is False on BOTH
+                # rows on purpose: the party wins the seat, and which of these
+                # two people wins it is not something this model claims.
+                "same_party_general": True,
+                "winner": False,
+                "is_flip": False,      # same party as the incumbent, by definition
+                "is_tossup": False,
+                "margin": None,
+            })
+
     for race_id, state, district in races:
+        if (state, district) in locked:
+            continue
         finalists = []
         parties = [p for (s, d, p) in roster if s == state and d == district]
         incumbent_party = next(
@@ -468,8 +547,34 @@ if __name__ == "__main__":
             print(f"  {marker} {r['party']}  {r['name']:<28} {detail}  "
                   f"env: D{r['env']:+.1f} margin  → {r['projected']:.1f}%{inc}{flip}")
 
+    # Three bases now, not two. A same-party-general row has no lean and no
+    # projection, so it cannot be printed by either branch of print_section —
+    # and lumping it in with lean-only would misreport a certain seat as a
+    # structural guess.
+    locked_rows = [r for r in results if r.get("same_party_general")]
     polled    = [r for r in results if r["has_polls"]]
-    lean_only = [r for r in results if not r["has_polls"]]
+    lean_only = [r for r in results if not r["has_polls"] and not r.get("same_party_general")]
+
+    if locked_rows:
+        by_race = {}
+        for r in locked_rows:
+            by_race.setdefault(r["race"], []).append(r)
+        print(f"\n{'═'*70}\nSAME-PARTY GENERALS — {len(by_race)} district(s), seat certain\n{'═'*70}")
+        for race in sorted(by_race):
+            rows = by_race[race]
+            names = " vs. ".join(f"{r['name']}{' [incumbent]' if r['is_incumbent'] else ''}"
+                                 for r in rows)
+            print(f"  {race}  {rows[0]['party']} hold certain — {names}")
+            # Any poll of the intra-party matchup is REPORTED and not used.
+            # Dropping it silently would be the worse failure of the two.
+            polled_rows = [r for r in rows if r["poll_avg"] is not None]
+            if polled_rows:
+                shares = " · ".join(f"{r['name']} {r['poll_avg']:.1f}%"
+                                    for r in polled_rows)
+                print(f"         polled: {shares}  (reported, NOT used — see below)")
+        print("  Which of them wins is not modeled: the lean is a D-minus-R")
+        print("  quantity and says nothing about an intra-party contest, so")
+        print("  there is no baseline for an intra-party poll to blend against.")
 
     print_section(polled, f"POLLED DISTRICTS — {len(polled_races)} districts")
 
@@ -485,8 +590,17 @@ if __name__ == "__main__":
               f"included in the seat counts below.")
 
     winners = [r for r in results if r.get("winner")]
-    d_leads = sum(1 for r in winners if r["party"] == "D")
-    r_leads = sum(1 for r in winners if r["party"] == "R")
+    # A same-party general has no `winner` row — nobody is marked, because the
+    # matchup is unmodeled — but the SEAT is as real as any other and has to be
+    # counted, or these totals silently stop summing to a chamber.
+    # One entry per DISTRICT, not per candidate — locked_rows holds both
+    # finalists of each, and they share a party and a seat.
+    locked_party_by_race = {r["race"]: r["party"] for r in locked_rows}
+    d_locked = sum(1 for p in locked_party_by_race.values() if p == "D")
+    r_locked = sum(1 for p in locked_party_by_race.values() if p == "R")
+
+    d_leads = sum(1 for r in winners if r["party"] == "D") + d_locked
+    r_leads = sum(1 for r in winners if r["party"] == "R") + r_locked
     d_polled = sum(1 for r in winners if r["party"] == "D" and r["has_polls"])
     r_polled = sum(1 for r in winners if r["party"] == "R" and r["has_polls"])
     # Districts inside the closest rating band. NOT reported as toss-ups: each
@@ -495,11 +609,15 @@ if __name__ == "__main__":
     # unresolved — the dashboard colors them the same way, Tilt D / Tilt R.
     tilts = sum(1 for r in winners if abs(r.get("margin", 0.0)) < TILT_MARGIN_THRESHOLD)
 
+    n_locked = d_locked + r_locked
     print(f"\n{'─'*62}")
-    print(f"  Districts projected: {len(winners)}   "
-          f"(polled: {len(polled_races)}  ·  lean-only: {len(winners) - len(polled_races)})")
-    print(f"  D leads: {d_leads}  (polled {d_polled}, lean-only {d_leads - d_polled})")
-    print(f"  R leads: {r_leads}  (polled {r_polled}, lean-only {r_leads - r_polled})")
+    print(f"  Districts projected: {len(winners) + n_locked}   "
+          f"(polled: {len(polled_races)}  ·  lean-only: {len(winners) - len(polled_races)}"
+          f"  ·  same-party general: {n_locked})")
+    print(f"  D leads: {d_leads}  (polled {d_polled}, "
+          f"lean-only {d_leads - d_polled - d_locked}, certain {d_locked})")
+    print(f"  R leads: {r_leads}  (polled {r_polled}, "
+          f"lean-only {r_leads - r_polled - r_locked}, certain {r_locked})")
     print(f"  Within {TILT_MARGIN_THRESHOLD:g}pt (already counted in the leads above): {tilts}")
     print(f"\n  Seat COUNTS only — not a control probability. Lean-only districts")
     print(f"  rest on 2022-vintage lean, and those in TX/NC/OH/FL rest on boundaries")

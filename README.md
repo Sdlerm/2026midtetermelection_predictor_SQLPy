@@ -96,6 +96,19 @@ KY,D,Charles Booker
 
 **`house_nominees.csv`** is the House equivalent, in wide format (one row per district with `dem_nominee` and `rep_nominee` columns). A district enters the roster only when **both** nominees are filled in; anything else is skipped with a reason printed in the ingest summary.
 
+**Same-party generals** are the one documented exception. California and Washington run a top-two primary, so a safe district can send two candidates of the *same* party to the general — CA-07 is Doris Matsui vs. Mai Vang, both Democrats. The opposing column is legitimately empty there, which the both-sides rule read as "one side unsettled" and skipped; the district then fell through to the lean-only path and was modeled as a generic Democrat against a generic Republican who is not on the ballot.
+
+Such a row sets **`same_party_general`** to `D` or `R` and puts *both* finalists in that party's nominee column, separated by `; `, **incumbent first** (one incumbent flag covers the pair, so the ordering is what tells them apart):
+
+```csv
+state,district,dem_nominee,rep_nominee,...,same_party_general
+CA,7,Doris Matsui; Mai Vang,,...,D
+```
+
+The separator is a semicolon, never a comma — real names carry commas (`Victor Aguilar, Jr.`), and several nominee cells already use a comma to list unresolved primary contenders as one opaque string.
+
+Downstream this is a **locked seat**: certain for the party, unmodeled between the people. `house_model.py` emits its rows with `same_party_general=True` and `projected`/`lean`/`margin` set to `None` — no number is known, rather than one being missing — and neither the polled nor the lean-only path touches the district. `monte_carlo_house.baseline_seats()` carries it as a baseline seat instead of simulating it, which is why that function now takes `(predictions, races)` like its Senate counterpart. Nothing in this repo measures an intra-party split, so nobody is marked the winner.
+
 ### 5. State lean data
 
 `state_lean.csv` contains structural partisan lean information for each state, based on historical voting patterns. This provides a baseline expectation that is blended with polling data — and serves as the sole basis for unpolled races (see the lean-only fallback below).
@@ -231,6 +244,8 @@ python monte_carlo_house.py
 
 Same 1,000,000 simulations, same `margin + national_error + local_error` structure, over all 435 districts. Prints per-district win probabilities for competitive seats, the D/R seat distribution with a 90% range, and P(D majority ≥ 218). Runs in ~5 seconds at ~700 MB.
 
+Districts decided by a **same-party general** are the exception: they carry no D-vs-R margin, so they are not simulated at all. `baseline_seats()` counts them as seats held regardless of the draw and checks that simulated + decided still equals 435 — it raises if not, because P(majority) measured against the wrong chamber size is a false forecast, not a degraded one.
+
 Two things differ from the Senate version, both forced by the data:
 
 -   **Per-district local σ.** Only ~36 districts are polled; the other ~399 rest on `district_lean.csv`. Their error isn't polling error, it's "how wrong is 2022-vintage lean about 2026" — roughly double. So σ_local is a vector selected by `has_polls`, not a scalar.
@@ -272,7 +287,7 @@ streamlit run dashboard.py
 Opens an interactive web dashboard at `http://localhost:8501` with:
 
 -   **Senate margin map** — continuous D/R gradient; lean-only races (no polls) render at reduced opacity with an explicit hover label, so polled and unpolled projections are visually distinct
--   **House Tier 2 map** — all 435 districts colored by discrete rating bins (Safe/Likely/Lean/Tilt, D and R) driven by the margin thresholds in `calibration.py`. There is **no neutral toss-up bin**: every district is colored for whichever candidate has the greater projected vote share, and margins under `TILT_MARGIN_THRESHOLD` (5 pts) land in the pale Tilt D / Tilt R shades rather than a shared yellow. Closeness is conveyed by the band, not by withholding a call. Lean-only districts render at reduced opacity so coverage never reads as confidence. Requires `data/cd119.geojson` (see Setup §6) and `data/district_lean.csv` (Step 5a). For TX/NC/OH/FL both the boundaries *and* the lean are pre-2025 redraw.
+-   **House Tier 2 map** — all 435 districts colored by discrete rating bins (Safe/Likely/Lean/Tilt, D and R) driven by the margin thresholds in `calibration.py`. There is **no neutral toss-up bin**: every district is colored for whichever candidate has the greater projected vote share, and margins under `TILT_MARGIN_THRESHOLD` (5 pts) land in the pale Tilt D / Tilt R shades rather than a shared yellow. Closeness is conveyed by the band, not by withholding a call. Lean-only districts render at reduced opacity so coverage never reads as confidence; districts decided by a same-party general render at full opacity and hover as `SAME-PARTY GENERAL, seat certain`, with no vote shares — the opacity channel encodes how much is known, and that is the one basis that knows outright. Requires `data/cd119.geojson` (see Setup §6) and `data/district_lean.csv` (Step 5a). For TX/NC/OH/FL both the boundaries *and* the lean are pre-2025 redraw.
 -   **Senate outlook** — P(D majority ≥51), P(R control ≥50 + VP), mean D seats, the Nebraska independent's win/pivot probabilities, and a seat-distribution histogram colored by which side of the majority line each bar falls on (the blue share of the mass *is* P(D majority))
 -   **House outlook** — P(D majority ≥218), P(R majority), mean D seats, a 90% seat range, the same seat-distribution histogram, and a sortable table of the ~150 competitive districts (P(D win) between 5% and 95%), which is where the House simulation becomes readable — a choropleth can show a rating but not a probability
 -   Senate control banner, projected flips, sortable race table with per-race Monte Carlo win probabilities, and a per-state drilldown
