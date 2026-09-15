@@ -5,6 +5,12 @@ from senate_ingest import upsert_pollster, upsert_race, upsert_candidate
 
 _HOUSE_NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "house_nominees.csv")
 _HOUSE_POLLS_PATH    = os.path.join(os.path.dirname(__file__), "data", "house.csv")
+# Manually-sourced polls added via add_poll.py — kept separate from house.csv
+# because that file is periodically overwritten wholesale by a fresh NYT/538
+# feed download, which would silently discard manual rows appended directly
+# to it. Loaded on top of house.csv (without re-wiping) on every run so
+# manual entries always end up in the database.
+_HOUSE_ADDED_PATH    = os.path.join(os.path.dirname(__file__), "data", "house_added.csv")
 
 
 def _pad(district):
@@ -125,14 +131,18 @@ def _build_district_tokens(roster):
     return tokens
 
 
-def load_house_polls(filepath=_HOUSE_POLLS_PATH, year=2026):
-    """Replace the 2026 House poll data in the DB with the contents of `filepath`.
+def load_house_polls(filepath=_HOUSE_POLLS_PATH, year=2026, wipe=True):
+    """Load House poll data from `filepath` into the DB.
 
-    DESTRUCTIVE, but only after the input is known good: every read, filter
-    and dedup below runs before the wipe, and the wipe shares one transaction
-    with the inserts. A missing or malformed house.csv therefore raises with
-    the existing rows untouched, rather than emptying the table and then
-    failing on the read.
+    DESTRUCTIVE when wipe=True (the default), but only after the input is
+    known good: every read, filter and dedup below runs before the wipe, and
+    the wipe shares one transaction with the inserts. A missing or malformed
+    house.csv therefore raises with the existing rows untouched, rather than
+    emptying the table and then failing on the read.
+
+    Pass wipe=False to add rows on top of what's already loaded instead of
+    clearing 2026 House data first — used to layer data/house_added.csv on
+    top of a fresh house.csv load without wiping it back out.
     """
     roster, skipped_nominees = load_house_nominees()
     rostered_districts = {(s, d) for (s, d, _p) in roster}
@@ -217,13 +227,14 @@ def load_house_polls(filepath=_HOUSE_POLLS_PATH, year=2026):
     # line, and sqlite3's implicit transaction means the single commit below
     # covers the deletes too — so a crash part-way through the insert loop
     # rolls the wipe back with it instead of leaving the table empty.
-    cleared = cur.execute(
-        "SELECT COUNT(*) FROM races WHERE year = 2026 AND district != ''"
-    ).fetchone()[0]
-    cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
-    cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
-    cur.execute("DELETE FROM races WHERE year = 2026 AND district != ''")
-    print(f"Cleared {cleared} 2026 House race(s) and their polls.")
+    if wipe:
+        cleared = cur.execute(
+            "SELECT COUNT(*) FROM races WHERE year = 2026 AND district != ''"
+        ).fetchone()[0]
+        cur.execute("DELETE FROM polls WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
+        cur.execute("DELETE FROM candidates WHERE race_id IN (SELECT id FROM races WHERE year = 2026 AND district != '')")
+        cur.execute("DELETE FROM races WHERE year = 2026 AND district != ''")
+        print(f"Cleared {cleared} 2026 House race(s) and their polls.")
 
     loaded = 0
     for _, row in df.iterrows():
@@ -263,3 +274,6 @@ if __name__ == "__main__":
         print(f"ERROR: {_HOUSE_POLLS_PATH} not found. Download it manually and place it in data/")
     else:
         load_house_polls()
+
+        if os.path.exists(_HOUSE_ADDED_PATH) and os.path.getsize(_HOUSE_ADDED_PATH) > 0:
+            load_house_polls(_HOUSE_ADDED_PATH, wipe=False)

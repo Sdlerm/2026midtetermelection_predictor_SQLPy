@@ -295,6 +295,12 @@ if __name__ == "__main__":
     DATA = os.path.join(os.path.dirname(__file__), "data")
 
     senate_path = os.path.join(DATA, "senate.csv")
+    # Manually-sourced polls added via add_poll.py — kept separate from
+    # senate.csv because that file is periodically overwritten wholesale by a
+    # fresh NYT/538 feed download, which would silently discard manual rows
+    # appended directly to it. Loaded on top of senate.csv on every run so
+    # manual entries always end up in the database.
+    senate_added_path = os.path.join(DATA, "senate_added.csv")
 
     if not os.path.exists(senate_path):
         print(f"ERROR: {senate_path} not found. Download it manually and place it in data/")
@@ -311,6 +317,9 @@ if __name__ == "__main__":
         print("Cleared 2026 poll data.")
 
         load_nyt_senate_polls(senate_path)
+
+        if os.path.exists(senate_added_path) and os.path.getsize(senate_added_path) > 0:
+            load_nyt_senate_polls(senate_added_path)
 
         climate_path = os.path.join(DATA, "climate.csv")
         if os.path.exists(climate_path):

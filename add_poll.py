@@ -1,10 +1,19 @@
-"""add_poll.py — append a manually-sourced poll to data/house.csv or data/senate.csv
-in the schema house_ingest.py / senate_ingest.py expect.
+"""add_poll.py — append a manually-sourced poll to data/house_added.csv or
+data/senate_added.csv, in the schema house_ingest.py / senate_ingest.py
+expect.
 
-This does NOT touch the database. It only appends rows to the CSV, which
-house_ingest.py / senate_ingest.py wipe-and-reload from on every run — so
-after appending, rerun the matching ingest script to actually load it
-(interactive mode offers to do this for you).
+Manually-added polls are kept in their own *_added.csv file rather than
+appended directly to house.csv / senate.csv, because those files are
+periodically overwritten wholesale by a fresh NYT/538 feed download — writing
+directly into them would silently lose manually-added polls the next time
+that happens. house_ingest.py / senate_ingest.py each load their normal feed
+file and then their *_added.csv on every run, so entries in the added file
+always make it into the database regardless of how many times the feed file
+gets redownloaded.
+
+This does NOT touch the database — after appending, rerun the matching
+ingest script to actually load it (interactive mode offers to do this for
+you).
 
 Run with no arguments (or -i/--interactive) to be prompted for each field:
     python add_poll.py
@@ -31,6 +40,8 @@ _ROOT           = os.path.dirname(__file__)
 DATA_DIR        = os.path.join(_ROOT, "data")
 HOUSE_CSV       = os.path.join(DATA_DIR, "house.csv")
 SENATE_CSV      = os.path.join(DATA_DIR, "senate.csv")
+HOUSE_ADDED_CSV  = os.path.join(DATA_DIR, "house_added.csv")
+SENATE_ADDED_CSV = os.path.join(DATA_DIR, "senate_added.csv")
 HOUSE_NOMINEES  = os.path.join(_ROOT, "house_nominees.csv")
 SENATE_NOMINEES = os.path.join(_ROOT, "senate_nominees.csv")
 
@@ -283,16 +294,22 @@ def main():
     if len(state) != 2:
         sys.exit(f"state must be a 2-letter code, got {args.state!r}")
 
+    # Write to *_added.csv (not house.csv/senate.csv) — the feed files are
+    # periodically overwritten wholesale by a fresh download, which would
+    # silently discard manually-added rows. house_ingest.py / senate_ingest.py
+    # load the *_added.csv on top of the feed file on every run.
     if args.race == "house":
         if args.district is None:
             sys.exit("--district is required for house polls")
         district = _pad(args.district)
-        csv_path = HOUSE_CSV
+        csv_path = HOUSE_ADDED_CSV
+        schema_path = HOUSE_CSV
     else:
         if args.district is not None:
             sys.exit("--district is not used for senate polls")
         district = ""
-        csv_path = SENATE_CSV
+        csv_path = SENATE_ADDED_CSV
+        schema_path = SENATE_CSV
 
     try:
         candidates = [parse_candidate(c) for c in args.candidate]
@@ -304,13 +321,17 @@ def main():
 
     warn_if_unrostered(args.race, state, district, candidates)
 
-    if not os.path.exists(csv_path):
-        sys.exit(f"{csv_path} not found — run the normal NYT-feed download first "
+    if not os.path.exists(schema_path):
+        sys.exit(f"{schema_path} not found — run the normal NYT-feed download first "
                   f"(see README Setup step 3) so the column schema exists to append to.")
 
-    existing = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
-    rows, poll_id = build_rows(existing.columns.tolist(), args.race, state, district, args, candidates)
-    new_df = pd.DataFrame(rows, columns=existing.columns.tolist())
+    columns = pd.read_csv(schema_path, dtype=str, keep_default_na=False, nrows=0).columns.tolist()
+    if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+        existing = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    else:
+        existing = pd.DataFrame(columns=columns)
+    rows, poll_id = build_rows(columns, args.race, state, district, args, candidates)
+    new_df = pd.DataFrame(rows, columns=columns)
 
     preview_cols = ["poll_id", "pollster", "state", "seat_number", "end_date",
                     "population", "sample_size", "party", "candidate_name", "pct"]
