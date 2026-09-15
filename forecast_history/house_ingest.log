@@ -1,24 +1,6 @@
-Cleared 2026 House poll data.
 Dropped 4 stale House poll row(s)
+Cleared 86 2026 House race(s) and their polls.
 
-Loaded 317 House poll rows across 77 districts.
-4 nominee rows skipped:
-  - HI-01: one side unsettled
-  - MA-06: no nominees yet
-  - MA-08: no nominees yet
-  - NH-01: one side unsettled
-28 rostered district(s) with no polls — your future Tier 2 seed list: CA-14, CO-01, CO-02, CO-08, CT-01, DC-01, FL-01, FL-19, FL-20, FL-23, KY-04, MD-05, MD-06, MO-01, NY-04, NY-07, NY-10, NY-12, NY-13, NY-14, NY-15, TN-09, UT-01, UT-02, VA-06, VA-07, WI-07, WY-01
-
-8/25/26
-Loaded 333 House poll rows across 78 districts.
-4 nominee rows skipped:
-  - HI-01: one side unsettled
-  - MA-06: no nominees yet
-  - MA-08: no nominees yet
-  - NH-01: one side unsettled
-27 rostered district(s) with no polls — your future Tier 2 seed list: CA-14, CO-01, CO-02, CO-08, CT-01, FL-01, FL-19, FL-20, FL-23, KY-04, MD-05, MD-06, MO-01, NY-04, NY-07, NY-10, NY-12, NY-13, NY-14, NY-15, TN-09, UT-01, UT-02, VA-06, VA-07, WI-07, WY-01
-
-Loaded 333 House poll rows across 78 districts.
-31 rostered district(s) with no polls — your future Tier 2 seed list: CA-14, CO-01, CO-02, CO-08, CT-01, FL-01, FL-19, FL-20, FL-23, HI-01, KY-04, MA-06, MA-08, MD-05, MD-06, MO-01, NH-01, NY-04, NY-07, NY-10, NY-12, NY-13, NY-14, NY-15, TN-09, UT-01, UT-02, VA-06, VA-07, WI-07, WY-01
-
-8/
+Loaded 360 House poll rows across 86 districts.
+2 polled district(s) not in house_nominees.csv (polls discarded): CA-34, GA-07
+33 rostered district(s) with no polls — your future Tier 2 seed list: CA-14, CO-01, CO-02, CO-08, CT-01, FL-01, FL-19, FL-20, FL-23, GA-13, HI-01, KY-03, KY-04, MA-06, MA-08, MD-05, MD-06, MO-01, NH-01, NY-04, NY-07, NY-10, NY-12, NY-13, NY-14, NY-15, TX-18, UT-01, UT-02, VA-06, VA-07, WI-07, WY-01

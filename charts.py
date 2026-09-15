@@ -16,6 +16,37 @@ TOTAL_HOUSE_SEATS = 435
 HOUSE_MAJORITY = 218
 
 CHARTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "charts")
+
+# Basis, encoded as LIGHTNESS rather than texture: three steps of one hue per
+# party, darkest = strongest evidence (seat certain -> poll-backed -> lean only).
+#
+# This replaces a hatch fill. Hatch was carrying real information, so it was not
+# decoration — but 388 of 435 seats are lean-only, so the textured state was the
+# DEFAULT, not the exception, and the chart rendered ~89% dense diagonal field.
+# That is the "texture on by default" anti-pattern arriving by demographics
+# rather than by choice, and it swamped the seat counts the chart exists to show.
+#
+# Lightness is also what the rest of this project already uses for exactly this
+# distinction: dashboard.plot_house_map and plot_margin_map both render
+# lean-only geographies at reduced opacity so that, in their words, coverage
+# never reads as confidence. The control chart was the one holdout.
+#
+# Both ramps pass the ordinal gates (monotone L, adjacent ΔL >= 0.06, light end
+# >= 2:1 on the canvas, single hue within 4°), and the two lean-only tints —
+# which touch each other in the middle of the bar, straddling the majority line
+# — separate at ΔE 28.0 normal / 22.2 protanopia. The light steps sit under 3:1
+# on white, which obligates a relief channel: every segment is named and counted
+# in the legend, and the totals repeat in the title.
+BASIS_RAMP = {
+    "D": {"certain": "#144a8e", "polls": "#3a7abf", "lean": "#6aa6f0"},
+    "R": {"certain": "#8c0000", "polls": "#c0392b", "lean": "#f66c56"},
+}
+
+# Visual separation between touching segments, in seats. ~2px at this figure's
+# width, and it is a GAP in the canvas rather than a stroke around each segment.
+# It shaves ~0.6 of a seat off each block, which is invisible at 435-wide and
+# never load-bearing: the exact counts are in the legend and the title.
+SEGMENT_GAP_SEATS = 0.6
 os.makedirs(CHARTS_DIR, exist_ok=True)
 
 
@@ -32,6 +63,37 @@ def _bar_stderr(stderr):
     false certainty".
     """
     return float("nan") if stderr is None else stderr
+
+
+def _legend_below(fig, ax, ncols=2, fontsize=8, reserve_in=0.75, handles=None, labels=None):
+    """Move a legend OUT of the axes, into reserved space under the x-axis label.
+
+    Every legend in this file used to be `ax.legend(loc="lower right")`, which
+    puts it inside the data area. Whether it landed on a bar was luck, and the
+    luck ran out in two places: the seat bars span the full axis width, so a
+    corner inside the axes is always over data, and the Senate margins chart
+    sorts ascending without inverting its y-axis, which puts its longest bar
+    (MA, D+29.5) in the bottom-right corner directly under the legend box.
+
+    Reserved space is measured in INCHES, not axes fractions, because these
+    figures range from 3in tall (the seat bars) to 25in (a 46-district margins
+    chart). A fraction that leaves a comfortable strip on one is either a
+    crushed sliver or half the canvas on the other.
+
+    Call AFTER tight_layout: subplots_adjust overrides the bottom it computed,
+    and the legend is excluded from the layout so its figure-coordinate anchor
+    cannot make tight_layout reserve the whole bottom of the figure — the same
+    bargain _plot_vote_shares already strikes for its top legend.
+    """
+    if handles is None:
+        handles, labels = ax.get_legend_handles_labels()
+    fig_h = fig.get_figheight()
+    fig.subplots_adjust(bottom=reserve_in / fig_h)
+    leg = fig.legend(handles, labels, loc="lower center",
+                     bbox_to_anchor=(0.5, 0.04 / fig_h),
+                     ncols=ncols, frameon=False, fontsize=fontsize)
+    leg.set_in_layout(False)
+    return leg
 
 
 def _combine_stderr(d_stderr, r_stderr):
@@ -136,9 +198,10 @@ def plot_race_margins():
 
     d_patch = mpatches.Patch(color="#3a7abf", label="Dem leads")
     r_patch = mpatches.Patch(color="#c0392b", label="Rep leads")
-    ax.legend(handles=[d_patch, r_patch], loc="lower right")
 
     plt.tight_layout()
+    _legend_below(fig, ax, ncols=2, fontsize=9,
+                  handles=[d_patch, r_patch], labels=["Dem leads", "Rep leads"])
     out_path = os.path.join(CHARTS_DIR, "margins.png")
     plt.savefig(out_path, dpi=150)
     print(f"Saved to {out_path}")
@@ -186,9 +249,24 @@ def plot_seat_count():
                 left=d_seats + r_seats, label=f"Unassigned ({uncalled})")
 
     ax.axvline(50, color="black", linewidth=1.2, linestyle="--", label="50-seat majority")
-    ax.text(50, 0.29, "← VP\ntiebreak", ha="center", va="bottom", fontsize=6.5, color="black")
     ax.set_xlim(0, 100)
+    # Explicit ylim: the bar spans -0.25..0.25, and with autoscale the axes hugged
+    # it so tightly that anything drawn above the bar landed outside the plot and
+    # collided with the suptitle. The headroom below is where the tiebreak note
+    # sits, inside the axes.
+    ax.set_ylim(-0.45, 0.55)
     ax.set_yticks([])
+
+    # Only when a tiebreak actually decides the chamber. It used to print on
+    # every run, so a 52-48 Senate carried a "VP tiebreak" note about a
+    # tiebreak that does not happen — and printed it on top of the title.
+    if control["tiebreaker"]:
+        # Offset to the right of the majority line, with a leader back to it:
+        # centred on x=50 the dashed line ran straight through the words.
+        ax.annotate("VP tiebreak", xy=(50, 0.28), xytext=(57, 0.40),
+                    ha="left", va="center", fontsize=7, color="#333333",
+                    arrowprops=dict(arrowstyle="-", color="#999999", linewidth=0.8,
+                                    shrinkA=0, shrinkB=2))
     xlabel = f"Projected seats  (D + R = {total})" if uncalled == 0 else f"Projected seats  (D + R + unassigned = {total})"
     ax.set_xlabel(xlabel)
 
@@ -196,9 +274,8 @@ def plot_seat_count():
     if control["tiebreaker"]:
         title += "  (50–50 · R via VP tiebreak)"
     ax.set_title(title, fontweight="bold")
-    ax.legend(loc="lower right", fontsize=8)
-
     plt.tight_layout()
+    _legend_below(fig, ax, ncols=4, fontsize=8, reserve_in=0.85)
     out_path = os.path.join(CHARTS_DIR, "seat_count.png")
     plt.savefig(out_path, dpi=150)
     print(f"Saved to {out_path}")
@@ -389,17 +466,32 @@ def _house_rows(polled_only=True):
     and lean-only rows carry stderr=None, which the error-bar math cannot
     consume. Only the chamber-wide seat chart passes False.
 
+    SAME-PARTY GENERALS come back separately, in `locked`. A top-two district
+    whose finalists share a party (CA-07: Matsui vs. Vang, both D) has no
+    D-vs-R pair to plot and no margin to sort by, so it can never be a row
+    here — but its SEAT is real, and the chamber-wide chart has to count it or
+    the bar stops summing to 435. Returning it beside the rows is what stops
+    that from being a silent drop: before this existed, the pairing loop below
+    hit `"R" not in parties`, skipped the district, and the control chart
+    quietly reported a 434-seat House.
+
     Returns
     -------
-    list of tuple
-        (race, d_key, d_info, r_info, margin) sorted by D margin, descending.
-        d_info / r_info are dicts with projected, name, is_incumbent, is_flip,
-        winner, has_polls, and stderr keys; margin is D projected minus R.
+    (rows, locked)
+        rows: list of (race, d_key, d_info, r_info, margin), sorted by D
+        margin descending. d_info / r_info are dicts with projected, name,
+        is_incumbent, is_flip, winner, has_polls, and stderr keys.
+        locked: {race: party} for same-party generals — certain seats, no bar.
     """
     predictions, _, _ = predict_house_races()
 
+    locked = {r["race"]: r["party"]
+              for r in predictions if r.get("same_party_general")}
+
     seen = {}
     for r in predictions:
+        if r.get("same_party_general"):
+            continue
         if polled_only and not r.get("has_polls"):
             continue
         race = r["race"]
@@ -427,7 +519,7 @@ def _house_rows(polled_only=True):
         rows.append((race, d_key, d_info, r_info, margin))
 
     rows.sort(key=lambda row: row[4], reverse=True)
-    return rows
+    return rows, locked
 
 
 def plot_house_vote_shares():
@@ -445,7 +537,7 @@ def plot_house_vote_shares():
     directory. If no polled districts are available (house_ingest.py not run),
     prints a notice and returns without plotting.
     """
-    rows = _house_rows()
+    rows, _locked = _house_rows()   # locked districts have no D-vs-R bar to draw
     if not rows:
         print("No polled House races found — run house_ingest.py first.")
         return
@@ -472,7 +564,7 @@ def plot_house_race_margins():
     If no polled districts are available (house_ingest.py not run), prints a
     notice and returns without plotting.
     """
-    rows = _house_rows()
+    rows, _locked = _house_rows()   # locked districts have no D-vs-R bar to draw
     if not rows:
         print("No polled House races found — run house_ingest.py first.")
         return
@@ -517,9 +609,10 @@ def plot_house_race_margins():
 
     d_patch = mpatches.Patch(color="#3a7abf", label="Dem leads")
     r_patch = mpatches.Patch(color="#c0392b", label="Rep leads")
-    ax.legend(handles=[d_patch, r_patch], loc="lower right")
 
     plt.tight_layout()
+    _legend_below(fig, ax, ncols=2, fontsize=9,
+                  handles=[d_patch, r_patch], labels=["Dem leads", "Rep leads"])
     out_path = os.path.join(CHARTS_DIR, "house_margins.png")
     plt.savefig(out_path, dpi=150)
     print(f"Saved to {out_path}")
@@ -532,9 +625,10 @@ def plot_house_party_control():
 
     Tier 2 closed the coverage gap Tier 1 had — every district now has a
     projection — but seat COUNTS are still not a control PROBABILITY. Each bar
-    is split by basis: the solid segment is poll-backed, the hatched segment is
-    lean-only. That split is the honest replacement for Tier 1's gray
-    "unmodeled" band: the uncertainty didn't disappear when coverage arrived,
+    is split by basis, encoded as three lightness steps of the party hue —
+    darkest for a seat already certain, mid for poll-backed, lightest for
+    lean-only (see BASIS_RAMP). That split is the honest replacement for Tier
+    1's gray "unmodeled" band: the uncertainty didn't disappear when coverage arrived,
     it moved from "we have no estimate" to "our estimate rests on 2022-vintage
     structural lean". A control probability needs a Monte Carlo over correlated
     district errors, which this chart deliberately does not fake.
@@ -543,7 +637,7 @@ def plot_house_party_control():
     If no districts are available (house_ingest.py not run), prints a notice
     and returns without plotting.
     """
-    rows = _house_rows(polled_only=False)
+    rows, locked = _house_rows(polled_only=False)
     if not rows:
         print("No House races found — run house_ingest.py first.")
         return
@@ -556,7 +650,12 @@ def plot_house_party_control():
                    if margin <= 0 and r_info["has_polls"])
     r_lean   = sum(1 for _, _, _, r_info, margin in rows
                    if margin <= 0 and not r_info["has_polls"])
-    d_leads, r_leads = d_polled + d_lean, r_polled + r_lean
+    # Same-party generals: certain seats, no bar, their own segment. Counted
+    # here or the chamber silently loses them — see _house_rows.
+    d_locked = sum(1 for party in locked.values() if party == "D")
+    r_locked = sum(1 for party in locked.values() if party == "R")
+    d_leads = d_polled + d_lean + d_locked
+    r_leads = r_polled + r_lean + r_locked
     flips = sum(
         1 for _, _, d_info, r_info, _ in rows
         if d_info["is_flip"] or r_info["is_flip"]
@@ -564,19 +663,32 @@ def plot_house_party_control():
 
     fig, ax = plt.subplots(figsize=(9, 3))
 
-    # Order matters: polled segments sit on the outside edges so the two
-    # hatched lean-only blocks meet in the middle, straddling the majority line
-    # where the seats least supported by polling actually decide control.
+    # Order matters, and now it also reads as a gradient: strongest evidence at
+    # the outside edges, weakest in the middle. The two palest lean-only blocks
+    # meet at the centre, straddling the majority line — so the lightest ink on
+    # the chart sits exactly where the seats least supported by polling actually
+    # decide control.
+    gap = SEGMENT_GAP_SEATS
     left = 0
-    for width, color, hatch, label in [
-        (d_polled, "#3a7abf", None, f"Dem — polls ({d_polled})"),
-        (d_lean,   "#3a7abf", "//", f"Dem — lean only ({d_lean})"),
-        (r_lean,   "#c0392b", "//", f"Rep — lean only ({r_lean})"),
-        (r_polled, "#c0392b", None, f"Rep — polls ({r_polled})"),
+    for width, color, label in [
+        (d_locked, BASIS_RAMP["D"]["certain"], f"Dem — seat certain ({d_locked})"),
+        (d_polled, BASIS_RAMP["D"]["polls"],   f"Dem — polls ({d_polled})"),
+        (d_lean,   BASIS_RAMP["D"]["lean"],    f"Dem — lean only ({d_lean})"),
+        (r_lean,   BASIS_RAMP["R"]["lean"],    f"Rep — lean only ({r_lean})"),
+        (r_polled, BASIS_RAMP["R"]["polls"],   f"Rep — polls ({r_polled})"),
+        (r_locked, BASIS_RAMP["R"]["certain"], f"Rep — seat certain ({r_locked})"),
     ]:
         if width:
-            ax.barh(0, width, color=color, height=0.5, left=left,
-                    hatch=hatch, edgecolor="white", linewidth=0, label=label)
+            # Inset by half a gap on each side so neighbours are separated by
+            # canvas, not by a stroke drawn around them — but ONLY when the
+            # segment can afford it. A same-party general is a ONE-seat block,
+            # about 3px on a 435-wide axis, and taking 0.6 of a seat out of it
+            # erased it entirely: the first render showed no dark sliver at all.
+            # Below this threshold the block is drawn full width and its
+            # neighbour's gap does the separating.
+            inset = gap if width > 3 * gap else 0.0
+            ax.barh(0, width - inset, color=color, height=0.5,
+                    left=left + inset / 2, linewidth=0, label=label)
         left += width
 
     ax.axvline(HOUSE_MAJORITY, color="black", linewidth=1.2, linestyle="--",
@@ -585,14 +697,14 @@ def plot_house_party_control():
     ax.set_yticks([])
     ax.set_xlabel(f"House seats  (D + R = {TOTAL_HOUSE_SEATS})")
 
-    title = (f"House Tier 2: projected leads in all {len(rows)} districts — "
+    n_districts = len(rows) + len(locked)
+    title = (f"House Tier 2: projected leads in all {n_districts} districts — "
              f"seat counts, NOT a control probability\n"
              f"D: {d_leads}  R: {r_leads}  flips: {flips}  ·  "
-             f"{d_lean + r_lean} seats rest on lean only (hatched)")
+             f"{d_lean + r_lean} seats rest on lean only (palest band)")
     ax.set_title(title, fontweight="bold", fontsize=10)
-    ax.legend(loc="lower right", fontsize=8, ncols=2)
-
     plt.tight_layout()
+    _legend_below(fig, ax, ncols=3, fontsize=8, reserve_in=0.92)
     out_path = os.path.join(CHARTS_DIR, "house_control.png")
     plt.savefig(out_path, dpi=150)
     print(f"Saved to {out_path}")

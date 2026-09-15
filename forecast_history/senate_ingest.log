@@ -1,12 +1,5 @@
 Cleared 2026 poll data.
-WARNING: skipping 19 row(s) with candidate_name='Generic Democrat' (generic ballot test, not an actual nominee)
-WARNING: skipping 16 row(s) with candidate_name='Generic Republican' (generic ballot test, not an actual nominee)
-Dropped 80 stale poll row(s) (end_date > ~18 months before election_date)
-Loaded 472 poll entries from /tmp/proj/data/senate.csv
-
-8/25/26
-Cleared 2026 poll data.
-WARNING: skipping 18 row(s) with candidate_name='Generic Democrat' (generic ballot test, not an actual nominee)
-WARNING: skipping 15 row(s) with candidate_name='Generic Republican' (generic ballot test, not an actual nominee)
-Dropped 80 stale poll row(s) (end_date > ~18 months before election_date)
-Loaded 488 poll entries from /Users/minimaclerman/election_predictor_clean/data/senate.csv
+WARNING: skipping 14 row(s) with candidate_name='Generic Democrat' (generic ballot test, not an actual nominee)
+WARNING: skipping 11 row(s) with candidate_name='Generic Republican' (generic ballot test, not an actual nominee)
+Dropped 81 stale poll row(s) (end_date > ~18 months before election_date)
+Loaded 593 poll entries from /tmp/ep/data/senate.csv

@@ -79,6 +79,17 @@ RATING_COLORS = {
 }
 RATING_ORDER = list(RATING_COLORS)  # index = z value for the discrete colorscale
 
+# Reference lines (majority threshold, zero margin) on the plotly charts. NOT
+# "black": st.plotly_chart applies the VIEWER's Streamlit theme, and there is no
+# .streamlit/config.toml pinning one, so the plot surface is light or dark
+# depending on a setting we do not control. Black measures 21:1 on the light
+# surface and 1.11:1 on the dark one — the 218-majority line simply disappeared
+# for anyone running dark mode. This gray is the balanced step: 4.48:1 on white,
+# 4.22:1 on Streamlit's #0e1117, so the line reads in both without shouting in
+# either. (Matplotlib charts in charts.py keep black — they render to PNG on a
+# white canvas that no theme touches.)
+REFERENCE_LINE = "#777777"
+
 
 def rate(margin):
     """Signed margin (+ = D leads) -> rating bucket per calibration.py.
@@ -542,7 +553,7 @@ def plot_seat_distribution(dist, majority, chamber_label):
         marker_color=colors,
         hovertemplate="D seats: %{x}<br>%{y:.2%} of simulations<extra></extra>",
     ))
-    fig.add_vline(x=majority - 0.5, line_color="black", line_width=1.2, line_dash="dash",
+    fig.add_vline(x=majority - 0.5, line_color=REFERENCE_LINE, line_width=1.2, line_dash="dash",
                   annotation_text=f"{majority} = majority", annotation_position="top")
     fig.update_layout(
         xaxis_title=f"Democratic seats ({chamber_label})",
@@ -586,7 +597,7 @@ def plot_race_margins(df):
                 name=f"{party} leads",
             ))
 
-    fig.add_vline(x=0, line_color="black", line_width=0.8)
+    fig.add_vline(x=0, line_color=REFERENCE_LINE, line_width=0.8)
     fig.update_layout(
         xaxis_title="Leader margin (positive = non-Republican leads)",
         yaxis=dict(autorange="reversed"),
