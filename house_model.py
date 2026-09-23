@@ -447,7 +447,22 @@ def predict_house_races(year=2026):
         # let the lean-only pass below rebuild the district coherently. The same
         # goes for a pair whose shares cannot be a two-way general election; the
         # guard is shared with the Senate, see senate_model.two_way_poll_sum_ok.
-        if len(finalists) < 2 or not two_way_poll_sum_ok(finalists, f"{state}-{district}"):
+        #
+        # "One-sided" means missing a MAJOR party, not merely having fewer than
+        # two rows. monte_carlo_house needs a D-minus-R margin for every
+        # non-locked district, so a polled D + polled I with an unpolled R
+        # nominee (CA-11 before its row was corrected) is just as one-sided as
+        # a lone D — counting rows let it through, and the district vanished
+        # from the simulation. The lean-only pass gives the unpolled side a
+        # structural projection instead.
+        polled_parties = {f["party"] for f in finalists}
+        if not {"D", "R"} <= polled_parties:
+            if finalists:
+                missing = ", ".join(sorted({"D", "R"} - polled_parties))
+                print(f"WARNING: {state}-{district} has no polled {missing} "
+                      f"nominee — falling back to lean-only for this race.")
+            continue
+        if not two_way_poll_sum_ok(finalists, f"{state}-{district}"):
             continue
 
         results.extend(_finalize_race(finalists))
