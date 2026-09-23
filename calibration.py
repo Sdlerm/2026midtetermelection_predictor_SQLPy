@@ -38,7 +38,7 @@ import math
 # Chosen deliberately (Samuel, 2026-07-11) to stay consistent with how
 # the source itself deploys the number. Revisit after the 2026
 # retrospectives publish.
-SIGMA_TOTAL_MARGIN = 5.2
+SIGMA_TOTAL_MARGIN = 5.5
 
 # ---------------------------------------------------------------------
 # National (correlated) error
@@ -62,7 +62,7 @@ SIGMA_NATIONAL_MARGIN = 2.5
 # so local is whatever variance is "left over" after the national
 # component. Keeping it derived means changing either input above
 # keeps all three internally consistent.
-# Current value: sqrt(5.2^2 - 2.5^2) ≈ 4.56
+# Current value: sqrt(5.5^2 - 2.5^2) ≈ 4.91
 SIGMA_LOCAL_MARGIN = math.sqrt(SIGMA_TOTAL_MARGIN**2 - SIGMA_NATIONAL_MARGIN**2)
 
 # =====================================================================
@@ -267,7 +267,10 @@ HOUSE_MAJORITY = 218          # 435 is odd, so there is no tie and no tiebreaker
 # and the sim needs two live at once, so the House streams in chunks instead.
 # 25,000 x 435 float64 ≈ 87 MB per array — comfortable, and large enough that
 # per-chunk overhead stays negligible.
-SIM_CHUNK_HOUSE = 25_000
+# Reasonable change: increase SIM_CHUNK_HOUSE if the sim is running trivially fast and you want to reduce the number of chunks, or decrease it if the sim is running slowly and you want to reduce memory
+# e.g. 1_000_000 would be 3.5 GB per array, which is too much for most machines to handle comfortably.; 500_000 would
+# be 1.75 GB per array, which is still too much for most machines to handle comfortably.; 100_000 would be 350 MB per array, which is comfortable for most machines to handle.; 50_000 would be 175 MB per array, which is comfortable for most machines to handle.; 25_000 would be 87.5 MB per array, which is comfortable for most machines to handle.; 10_000 would be 35 MB per array, which is comfortable for most machines to handle.; 5_000 would be 17.5 MB per array, which is comfortable for most machines to handle.; 1_000 would be 3.5 MB per array, which is comfortable for most machines to handle.
+SIM_CHUNK_HOUSE = 500_000
 
 # ---------------------------------------------------------------------
 # Simulation count
@@ -277,7 +280,9 @@ SIM_CHUNK_HOUSE = 25_000
 #     N = 10,000  ->  ±0.5 percentage points
 # Plenty of precision given the sigmas above carry far more real-world
 # uncertainty than that. Bump to 100_000 only if runtime stays trivial.
-N_SIMS = 500_000
+# Increased N_SIMS to 1,000,000 on 2026-09-21 to reduce the Monte Carlo noise in the Senate forecast's; to change the
+# of simulations in House Forecasts, change
+N_SIMS = 1_000_000
 
 # ---------------------------------------------------------------------
 # Housekeeping
