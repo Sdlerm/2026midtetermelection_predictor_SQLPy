@@ -2,21 +2,21 @@ state,district,dem_nominee,rep_nominee,ind_nominee,dem_incumbent,rep_incumbent,d
 AK,1,John Williams,Nick Begich,,,1,John Williams; Mary S. Peltola; Matt Schultz,Nick Begich,
 AL,2,Shomari Figures,Rhett Marques,,1,,
 AR,2,Chris Jones,French Hill,,,1
-AZ,1,Amish Shah,Thomas (Jay) Feely,,,1,,Gina Swoboda; Thomas (Jay) Feely,
+AZ,1,Amish Shah,Jay Feely,,,1,,Gina Swoboda; Thomas (Jay) Feely,
 AZ,2,Jonathan Nez,Eli Crane,Curtis Goodwin,,1
 AZ,6,JoAnna Mendonza,Juan Ciscomani,,,1,JoAnna Mendonza,Juan Ciscomani,
 CA,3,Richard Pan,Kevin Kiley,,,1
 CA,6,Ami Bera,Rob Tucker,,1.0,,Heidi Hall,Kevin Kiley,
 CA,7,Doris Matsui; Mai Vang,,,1,,,,top-two: both finalists are Democrats,D
-CA,11,"Connie Chan, Scott Wiener",Dena Maldonado,,1.0,,,,
+CA,11,Scott Wiener,Dena Maldonado,Connie Chan	,1.0,,,,
 CA,14,"Aisha Wahab, Melissa Hernandez",Wendy Huang,,1.0,,"Aisha Wahab; Carin Elam; Matt Ortega; Melissa Hernandez; Rakhi Israni; Victor Aguilar, Jr.",Dena Maldonado; Wendy Huang,
 CA,22,Randy Villegas,David G. Valadao,,,1,Jasmeet Bains,David G. Valadao,
 CA,34,Jimmy Gomez,Calvin Lee,,1,,,
-CA,40,Esther Kim-Varet,"Ken Calvert, Young Kim",,,1,Esther Kim-Varet,Ken Calvert; Young Kim,
+CA,40,Esther Kim-Varet,Young Kim,,,1,Esther Kim-Varet,Ken Calvert; Young Kim,
 CA,48,Marni von Wilpert,Jim Desmond,,,1,Ammar Campa-Najjar,Darrell Issa,
 CO,1,Melat Kiros,Christy Peterson,,1.0,,Christy Peterson,,
 CO,2,Joe Neguse,Kelly Anne Dennison,,1,,Jason Bradley,Jeff Hurd,
-CO,3,Dwayne L. Romero,Jeff Hurd,Heather Barton,,1,Alex Kelloff,Jeff Hurd,
+CO,3,Dwayne Romero,Jeff Hurd,Heather Barton,,1,Alex Kelloff,Jeff Hurd,
 CO,5,Jessica Killin,Jeff Crank,Matt Cavanaugh,,1,Jessica Killin,Jeff Crank,
 CO,8,Manny Rutinel,Gabe Evans,,,1,,,
 CT,1,Luke Bronin,Amy Chai,,1.0,,,,
@@ -28,37 +28,36 @@ FL,9,Darren Soto,Dan Green,,1
 FL,11,Joe Strada,James Pericola,,,1
 FL,13,Leela Gray,Anna Paulina Luna,,,1,Leela Gray,Anna Paulina Luna,
 FL,14,Kathy Castor,Mike Beltran,,1,
-FL,16,Kelly Kirschner ,"Sydney
-Gruters 	",,,1
+FL,16,Kelly Kirschner ,Sydney Gruters 	,,,1
 FL,19,Victor Arias,Jim Schwartzel,,,1,,,
 FL,20,Debbie Wasserman Schultz,Brent Anderson,,1,,,,
 FL,22,Pia Dandiya,Casey Askar,,1
 FL,23,Lois Frankel,Deborah Adeimy,,1.0,,Jared Moskowitz; Oliver Larkin,,
 FL,25,Oliver G. Gilbert III,Te Mayonna Brown,,1
-FL,27,Eliott Rodriguez,Maria Elvira Salazar,,,1,Alexander Fornino; Daniella Levine Cava; Eliott Rodriguez; Mike Davey; Richard Lamondin; Robin Peguero,Maria Elvira Salazar; María Elvira Salazar,
+FL,27,Eliott Rodriguez,María Elvira Salazar',,,1,Alexander Fornino; Daniella Levine Cava; Eliott Rodriguez; Mike Davey; Richard Lamondin; Robin Peguero,Maria Elvira Salazar; María Elvira Salazar,
 FL,28,Hector Mujica,Carlos A. Gimenez,,,1,Hector Mujica,Carlos A. Gimenez,
-GA,7,Troy Kozycki,Rich McCormick,,,1
+GA,7,Tony Kozycki,Rich McCormick,,,1
 GA,11,John Cowan,Chris Harden,,,1
 GA,13,Everton Blair,Jonathan Chavez,,1
 HI,1,Ed Case,Adriel Lam	,,1.0,,,,
 IA,1,Christina Bohannan,Mariannette Miller-Meeks,,,1,Christina Bohannan,Mariannette Miller-Meeks,
 IA,2,Lindsay James,Joe Mitchell,,,1,Lindsay James,Joe Mitchell,
 IA,3,Sarah Trone Garriott,Zach Nunn,,,1,Jennifer Konfrst; Sarah Trone Garriott,Zach Nunn,
-ID,1,Kaylee Peterson,Ross Fulcher,,,1
-IL,4,Raymond Lopez,Robert Cruz,,1
+ID,1,Kaylee Peterson,Russ Fulcher,,,1
+IL,4,Raymond Lopez,Robert Cruz,,1,
 IN,5,Deborah Pickett,Victoria Spartz,,,1
 KY,3,Morgan McGarvey,Maria Rodriguez	,,1,,
 KY,4,Melissa Claire Strange,Ed Gallrhein,,,1,,,
 KY,6,Todd Kelly,Andy Barr,,,1
 MA,6,Dan Koh,Micah Jones,,1.0,,Beth Andres-Beck; Dan Koh; Jamie Belsito; John Beccia; Mariah Lancaster; Tram Nguyen,,
 MA,8,Stephen F. Lynch,Robert Burke,,1.0,,Patrick Roath; Stephen F. Lynch,,
-MD,1,Dan Schwartz,Andrew Harris,,,1,
+MD,1,Dan Schwartz,Andy Harris,,,1,
 MD,5,Adrian Boafo,Chris Chaffee,,1.0,,Adrian Boafo; Arthur Ellis; Harry Dunn; Harry Jarin; Nicole Williams; Quincy Bareebe; Rushern Baker; Wala Blegay,,
 MD,6,April McClain Delaney,Robin Ficker,,1.0,,April McClain Delaney; David J. Trone,,
-ME,2,Joseph M. Badacci,Paul R. LePage,,1.0,,Jared Forrest Golden; Joe Baldacci; Jordan Wood; Matt Dunlap,Paul R. LePage,
+ME,2,Joseph M. Badacci,Paul LePage,,1.0,,Jared Forrest Golden; Joe Baldacci; Jordan Wood; Matt Dunlap,Paul R. LePage,
 MI,4,Sean McCann,Bill Huizenga,,,1,Sean McCann,Bill Huizenga,
 MI,7,Bridget Brink,Tom Barrett,,,1,Bridget Brink; Matt Maasdam; William Lawrence,,
-MI,10,Christina Hines,Michael Bouchard,,,1,,Justin Kirk; Mike Bouchard; Robert Lulgjuraj; Steffan Demetropoulos,
+MI,10,Christina Hines,Mike Bouchard,,,1,,Justin Kirk; Mike Bouchard; Robert Lulgjuraj; Steffan Demetropoulos,
 MN,1,Jake Johnson,Brad Finstad,,,1,Jake Johnson,Brad Finstad,
 MN,2,Matt Little,Eric Platt,,1.0,,Kaela Berg; Matt Klein; Matt Little,,
 MO,1,Wesley Bell,Paul Berry III,,1.0,,Cori Bush; Wesley Bell,,
@@ -66,7 +65,7 @@ MO,2,Fred Wellman,Ann Wagner,,,1,Fred Wellman,Ann Wagner,
 MT,1,Sam Forstag,Aaron Flint,,,1,Matt Rains; Ryan Busse; Sam Forstag,Aaron Flint; Ryan K. Zinke,
 MT,2,Brian Miller,Troy Downing,,,1
 NC,1,Don Davis,Laurie Buckhout,,1.0,,Don Davis,Laurie Buckhout,
-NC,3,Raymond Smith,Greg Murphy,,,1,
+NC,3,Raymond Smith Jr.,Greg Murphy,,,1,
 NC,7,Kimberly Hardy,David Rouzer,,,1
 NC,8,Colby Watson,Mark Harris,,,1
 NC,9,Richard Ojeda,Richard Hudson,,,1
@@ -89,7 +88,7 @@ NY,12,Micah Lasher,Caroline Shinkle,,1.0,,Alan Pardee; Alex Bores; Chris Diep; G
 NY,13,Darializa Avila Chevalier,Jomo M. Williams,,1.0,,Adriano Espaillat; Darializa Avila Chevalier; Oscar Romero; Theo Chino-Tavarez,,
 NY,14,Alexandria Ocasio-Cortez,Diamant Hysenaj,,1.0,,Alexandria Ocasio-Cortez; Diamant Hysenaj;,,
 NY,15,Ritchie Torres,Joseph J. Cinquemani,,1.0,,Jose Vega; Michael Blake; Ritchie Torres,,
-NY,17,Cait Conley,Michael Lawler,,,1,Beth Davidson; Cait Conley; Effie Phillips-Staley; John Cappello; Mike Sacks; Peter Chatzky,,
+NY,17,Cait Conley,Mike Lawler,,,1,Beth Davidson; Cait Conley; Effie Phillips-Staley; John Cappello; Mike Sacks; Peter Chatzky,,
 NY,18,Pat Ryan,Joseph J. Cinquemani,,1.0,,,,
 NY,21,Blake Gendebien,Anthony Constantino,,,1,,Anthony Constantino; Robert Smullen,
 OH,1,Greg Landsman,Eric Conroy,,1,
@@ -98,7 +97,7 @@ OH,9,Marcy Kaptur,Derek Merrin,,1.0,,Marcy Kaptur,Derek Merrin,
 OH,10,Amy Cox,Mike Turner,,,1
 OH,15,Don Leonard,Mike Carey,Brennan Barrington	,,1,,,
 PA,1,Bob Harvie,Brian Fitzpatrick,,,1,Bob Harvie,Brian Fitzpatrick,
-PA,7,Susan Wild,Ryan Mackenzie,,1
+PA,7,Susan Wild,Ryan E. Mackenzie,,1,
 PA,8,Paige Cognetti,Rob Bresnahan Jr.,,,1,Paige Cognetti,Rob Bresnahan Jr.,
 PA,10,Janelle Stelson,Scott Perry,,,1,Janelle Stelson,Scott Perry,
 SC,1,Mac Deford,Mark Smith,,,1,Mac Deford,Mark Smith,
@@ -113,9 +112,9 @@ TX,34,Vicente Gonzalez,Eric Flores,,1.0,,Vicente Gonzalez,Eric Flores,
 TX,35,Johnny Garcia	,Carlos De La Cruz,,,1
 UT,1,Ben McAdams,Riley Owen,,,1,Ben McAdams; Eva Lopez Chavez; Kathleen Riebe; Liban Mohamed; Luis Villarreal; Michael Farrell; Nate Blouin,,
 UT,2,Peter Crosby,Blake D. Moore,,,1,,Blake D. Moore; Colton Hatch; Karianne Lisonbee,
-VA,1,Shannon Taylor,Robert J. Wittman,,,1,Shannon Taylor,Robert J. Wittman,
+VA,1,Shannon Taylor,Robert Wittman,,,1,Shannon Taylor,Robert J. Wittman,
 VA,2,Missy Cotter Smasal,Jen Kiggans,,,1
-VA,5,Tom S. P. Perriello,John J. McGuire III,,,1
+VA,5,Tom Perriello,John McGuire,,,1
 VA,6,Beth Macy,Ben Cline,,,1,Beth Macy; Sam Rasoul; Tom Perriello,,
 VA,7,Eugene Vindman,Derrick Anderson,,1.0,,Adele McClure; Alfonso Lopez; Dan Helmer; Elizabeth Guzman; J.P. Cooney; Saddam Salim,,
 VT,1,Becca Balint,Mark Coester,,1
