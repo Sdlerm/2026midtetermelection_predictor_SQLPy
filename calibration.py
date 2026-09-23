@@ -38,7 +38,16 @@ import math
 # Chosen deliberately (Samuel, 2026-07-11) to stay consistent with how
 # the source itself deploys the number. Revisit after the 2026
 # retrospectives publish.
-SIGMA_TOTAL_MARGIN = 5.5
+#
+# Value history:
+#     5.2  2026-07-11  the sourced long-run average above
+#     5.5  2026-09-22  changed in 87cfb25 with no recorded reason
+#     5.3  2026-09-23  judgment call (Samuel), NOT sourced — a tuning
+#                      choice between the sourced 5.2 and the unexplained
+#                      5.5. Still inside the 538 per-cycle range (4.2-5.4).
+#                      Replace with a sourced value after the 2026
+#                      retrospectives publish.
+SIGMA_TOTAL_MARGIN = 5.3
 
 # ---------------------------------------------------------------------
 # National (correlated) error
@@ -62,7 +71,7 @@ SIGMA_NATIONAL_MARGIN = 2.5
 # so local is whatever variance is "left over" after the national
 # component. Keeping it derived means changing either input above
 # keeps all three internally consistent.
-# Current value: sqrt(5.5^2 - 2.5^2) ≈ 4.91
+# Current value: sqrt(5.3^2 - 2.5^2) ≈ 4.67
 SIGMA_LOCAL_MARGIN = math.sqrt(SIGMA_TOTAL_MARGIN**2 - SIGMA_NATIONAL_MARGIN**2)
 
 # =====================================================================
