@@ -30,7 +30,6 @@ db/
 /data/poll_report_2026-08-19.md
 /data/cd119.geojson
 /db/
-/forecast_history
 
 # — Python runtime ———————————————————————
 __pycache__/
