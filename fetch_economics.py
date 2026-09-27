@@ -5,12 +5,13 @@ import pandas as pd
 from datetime import date
 from dotenv import load_dotenv
 from init_db import get_connection
+from load_pollster_ratings import RATINGS_PATH
 
 load_dotenv()
 API_KEY = os.getenv("FRED_API_KEY")
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 YEAR = 2026
-LAMBDA = 0.0231  # approval-poll recency decay (half-life ~30 days). NOT the same as
+LAMBDA = 0.0462  # approval-poll recency decay (half-life ~15 days). NOT the same as
                # senate_model.LAMBDA (0.0154, ~45 days) — the comment here claimed a
                # parity that has not held since senate_model was retuned. Whether the
                # two SHOULD match is an open modeling question rather than a typo:
@@ -252,6 +253,20 @@ def compute_value(series_id, obs):
 # Presidential approval from NYT CSV
 # ---------------------------------------------------------------------------
 
+def load_grade_lookup(path=RATINGS_PATH):
+    """
+    Builds a {pollster name: numeric grade} dict from pollster_ratings.csv.
+
+    Names are stripped of stray whitespace because the ratings CSV has a few
+    entries with leading spaces (e.g. " Selzer"), which would never match.
+    Rows with a blank or non-numeric grade are left out, so a lookup on them
+    falls through to the caller's default instead of returning NaN.
+    """
+    ratings = pd.read_csv(path)
+    names   = ratings["Pollster"].astype(str).str.strip()
+    grades  = pd.to_numeric(ratings["numeric_grade"], errors="coerce")  # bad values -> NaN
+    return {name: grade for name, grade in zip(names, grades) if pd.notna(grade)}
+
 def fetch_approval_rating(filepath, year=2026):
     """
     Fetches and computes a weighted approval rating for Donald Trump based on poll data.
@@ -296,12 +311,20 @@ def fetch_approval_rating(filepath, year=2026):
     numerator   = 0.0
     denominator = 0.0
 
+    # Grades come from pollster_ratings.csv, NOT president.csv — the NYT file's
+    # numeric_grade column is blank for every row, which silently made every
+    # poll credibility 1.0. Built once here, outside the loop.
+    grade_lookup = load_grade_lookup()
+    unrated = set()  # pollsters that fell back to the default; set = no duplicates
+
     for _, row in df.iterrows():
-        # Credibility
-        try:
-            credibility = float(row["numeric_grade"]) if pd.notna(row["numeric_grade"]) else 1.0
-        except (ValueError, TypeError):
+        # Credibility — unknown pollsters default to 1.0 ("unknown = unproven"),
+        # matching the default in load_pollster_ratings.py
+        pollster_name = str(row["pollster"]).strip()
+        credibility = grade_lookup.get(pollster_name)
+        if credibility is None:
             credibility = 1.0
+            unrated.add(pollster_name)
 
         # Recency
         days = (today - row["end_date"].date()).days
@@ -320,6 +343,12 @@ def fetch_approval_rating(filepath, year=2026):
     if denominator == 0:
         print("  SKIP PRES_APPROVAL — no valid rows")
         return
+
+    # Loud, not silent: list every pollster that got the default grade
+    if unrated:
+        print(f"  NOTE PRES_APPROVAL — {len(unrated)} pollsters unrated, defaulted to 1.0:")
+        for name in sorted(unrated):
+            print(f"    - {name}")
 
     weighted_approval = round(numerator / denominator, 2)
     interp = interpret_factor("PRES_APPROVAL", weighted_approval)

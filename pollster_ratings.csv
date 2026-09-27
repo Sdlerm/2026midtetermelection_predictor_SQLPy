@@ -1,28 +1,52 @@
 Pollster,Pollster Rating Name,grade,numeric_grade
 1892 Polling,1892 Polling,B/C,1.6
+20/20 Insight,20/20,B/C,1.6
+A&A Research,A&A,B/C,1.6
 2040 Strategy Group,2040 Strategy Group,B/C,1.6
 A2 Insights,A2 Insights Polling,B/C,1.6
+Abacus Associates,Abacus,B/C,1.6
+Abt Associates,Abt,A/B,2.4
 Actionable Intel,Actionable Intel Group,A+,3.0
 ActiVote,ActiVote,B/C,1.6
 Advantage Inc.,Advantage,C/D,1.0
+African American Research Collaborative,African American Collaborative,B/C,1.6
+Alabama State University,Alabama State,A/B,2.4
 Alaska Survey Research,Alaska Survey Research,A,2.8
+Alloy Analytics,Alloy,B/C,1.6
 AlphaROC,AlphaROC,C/D,1.0
 AM Research Group,AM Research Group,B/C,1.6
-American Pulse Research & Polling,American Pulse Research & Polling,C/D,1.0
-American Research Group,American Research Group,A-,2.6
+Amber Integrated,Amber,B/C,1.6
+American Pulse Research & Polling,American Pulse Research & Polling,B/C,1.6
+American Research Group,American Research Group,C,1.4
 American Viewpoint,American Viewpoint,B/C,1.6
-Angus Reid Global,Angus Reid Global,A+,3.0
+Analytical Group,Analytical Group,B/C,1.6
+Angus Reid Global,Angus Reid Global,A/B,2.4
 Anzalone Liszt Grove Research,Anzalone Liszt Grove Research,A/B,2.4
+APC Research,APC Research,B/C,1.6
 AP-NORC,AP-NORC Center for Public Affairs Research,A/B,2.4
 Applecart,Applecart,A,2.8
+Arizona State University,Arizona State University Morrison Institute for Public Policy,B/C,1.6
+Arthur J. Finklestein & Associates,Arthur J. Finklestein,B/C,1.6
+ASA Marketing Group,ASA Marketing,B/C,1.6
+Ascend Action,Ascend Action,C/D,1.0
+Aspen Media & Market Research,Aspen Media,B/C,1.6
 AtlasIntel,Atlas Intel,A+,3.0
+Auburn University,Auburn University/Bryan C. Jordan School of Business,B/C,1.6
+Axis Research,Axis,B/C,1.6
+AYTM,AYTM,B/C,1.6
+Bainbridge Research Group,Bainbridge Research,B/C,1.6
+Baldwin Wallace University,Baldwin Wallace,B/C,1.6
+Bannon Communications Research,Bannon Communications Research,B/C,1.6
 Barbara Jordan Public Policy Research and Survey Center,Barbara Jordan Public Policy Research and Survey Center,C/D,1.0
+Baruch College Survey Research,Baruch College,B/C,1.6
 BDPC,BDPC,B/C,1.6
 Beacon Research,Beacon,A,2.8
 Beacon Research/Shaw & Company Research,Beacon Research/Shaw & Co. Research,A,2.8
+Becker Institute,Becker Institute,B/C,1.6
 Bedrock Polling,Bedrock Polling,B/C,1.6
 Bendixen & Amandi International,Bendixen & Amandi,B/C,1.6
 Big Data Poll,Big Data Poll,F,0.2
+Big Village,Big Village,B,2.0
 Blueprint Polling,Blueprint Polling,B/C,1.6
 Bowling Green State University Democracy and Public Policy Research Network/YouGov,Bowling Green State University/YouGov,C/D,1.0
 Braun Research,Braun Research,B/C,1.6
@@ -31,7 +55,13 @@ Brennan Center for Justice,Brennan Center for Justice,B/C,1.6
 brilliant corners Research & Strategies,brilliant corners Research & Strategies,B/C,1.6
 Capital Strategic Partners,,C/D,1.0
 Catalyst,Catalyst,C,1.4
-Change Research,Change Research,B-,1.8
+CBS News,CBS News/The New York Times,A,2.8
+Center for American Women and Politics,Center for American Women and Politics,B/C,1.6
+Center for Community Change,Center for Community Change,B/C,1.6
+Center for Public Policy Polling,Center for Public Policy Polling,A-,2.6
+Center for Survey Research,Center for Survey Research,B/C,1.6
+Center for the Study of Politics and Governance,Center for the Study of Politics and Governance,B/C,1.6
+Change Research,Change Research,C+,1.6
 Cherry Communications,Cherry Communications,B/C,1.6
 Christopher Newport University,Christopher Newport University Wason Center,A,2.8
 Civic Science,Civic Science,B/C,1.6
@@ -40,27 +70,32 @@ Clarity Campaign Labs,Clarity Campaign Labs,B/C,1.6
 CNN/SSRS,CNN/SSRS Polling,A-,2.6
 Civics Analytics,Civics Analytics,B/C,1.6
 Civiqs,Civiqs,B/C,1.6
-Clearview Research,Clearview Research	,B,2.0
+Clearview Research,Clearview Research,B,2.0
 College of Charleston,College of Charleston/American Viewpoint,B/C,1.6
 co/efficient,co/efficient,B+,2.2
 Cole Hargrave,Cole Hargrave,B/C,1.6
 Colorado Community Research,Colorado Community Research,C,1.4
 CWS Research,CWS Research,B/C,1.6
 Cygnal Political,Cygnal,A,2.8
-Data for Progress,Data for Progress,B,2.0
+Data for Progress,Data for Progress,B/C,1.6
+Data Orbital,Data Orbital,A,2.8
 Deep Root Analytics,Deep Root Analytics,A/B,2.4
 Democracy Corps,Democracy Corps,A/B,2.4
 Democracy Corps/Greenberg Quinlan Rosner Research,Democracy Corps/Greenberg Quinlan Rosner Research,A/B,2.4
 DHM Research,DHM Research,A/B,2.4
 Dartmouth College,Dartmouth College/YouGov,A,2.8
 Davis Research,Davis Research,B/C,1.6
+Digital Research,Digital Research,B/C,1.6
 Echelon Insights,Echelon Insights/GBAO,A/B,2.4
+Echelon Insights/GBAO,Echelon Insights/GBAO,A/B,2.4
 Embold Research,Embold Research,C-,1.0
 EMC Research,EMC Research,B/C,1.6
 Emerson College,Emerson College,A-,2.6
 EPIC-MRA,EPIC-MRA,A-,2.6
 "Fabrizio, Lee & Associates",Fabrizio,A/B,2.4
 Fabrizio Ward, Fabrizio,A/B,2.4
+Fabrizio Ward/Impact Research,Fabrizio Ward/Impact Research,A/B,2.4
+"Fabrizio, Lee & Associates/Impact Research","Fabrizio, Lee & Associates/Impact Research",A/B,2.4
 Field Research Corp.,Field Poll,A,2.8
 FM3 Research,FM3 Research,A/B,2.4
 Focaldata,Focaldata,B/C,1.6
@@ -71,41 +106,54 @@ Global Strategy Group,Global Strategy Group,B/C,1.6
 GQR,GQR,B+,2.2
 Gravis Marketing,Gravis Marketing/Kaplan Strategies,B-,1.8
 GrayHouse,GrayHouse,C/D,1.0
+Greenberg Quinlan Rosner Research,Greenberg Quinlan Rosner Research,A/B,2.4
+Grove Insight,Grove Insight,A/B,2.4
+GS Strategy Group,GS Strategy,B/C,1.6
 Guidant Polling and Strategy,Guidant Polling and Strategy,C/D,1.0
 Harper Polling,Harper Polling,B/C,1.6
 Hart Research Associates,Garin-Hart-Yang Research Group,A/B,2.4
 HarrisX,HarrisX,B/C,1.6
+"HarrisX/Harris Poll","HarrisX/Harris Poll",A/B,2.4
 Harris Insights & Analytics,Harris Insights & Analytics,A/B,2.4
 Harris Poll,Harris Poll,A/B,2.4
 Harris,Harris Poll,A/B,2.4
+"Hart Research Associates/Public Opinion Strategies","Hart Research Associates/Public Opinion Strategies",A/B,2.4
 Hendrix College,Hendrix College,B/C,1.6
 HighGround,HighGround Inc,B/C,1.6
 High Point University,High Point University Survey Research Center,B/C,1.6
 Hunt Research,Hunt Research,B/C,1.6
 Impact Research,Impact Research,A,2.8
+"Impact Research/National Research Inc.","Impact Research/National Research Inc.",A,2.8
 Innovative Research,Innovative Research,B/C,1.6
-InsiderAdvantage,InsiderAdvantage,A-,2.6
+InsiderAdvantage,InsiderAdvantage,B+,2.2
 Ipsos,Ipsos,B+,2.2
 J.L. Partners,,B/C,1.6
 JMC Enterprises,JMC Analytics,B/C,1.6
 John Zogby Strategies,John Zogby Strategies,B/C,1.6
+"Justice Research Fund","Justice Research Fund",C/D,1.0
 Kaplan Strategies,Kaplan Strategies,B,2.0
 Keating Research,Keating Research,B/C,1.6
 Lake Research Partners,Lake Research Partners,A/B,2.4
 Leger,Leger,B/C,1.6
+Lord Ashcroft Polls,Lord Ashcroft Polls,C,1.4
 Maine People's Resource Center,Maine People's Resource Center,B/C,1.6
-Marquette Law School,Marquette University Law School Poll,B+,2.2
+Manhattan Institute,Manhattan Institute,B/C,1.6
+"Marquette Law School","Marquette Law School",A/B,2.4
+"Marquette University Law School","Marquette University Law School",A/B,2.4
 Marist University,Marist University Poll,A,2.8
+Mason-Dixon Polling & Strategy,Mason-Dixon Polling & Strategy,A-,2.6
 MassINC Polling Group,MassINC Polling Group,A/B,2.4
 McLaughlin & Associates,McLaughlin & Associates,B/C,1.6
 MDW Communications,MDW Communications,C/D,1.0
 Meeting Street Research,Meeting Street Insights,B/C,1.6
 Mellman Group,,B/C,1.6
+Merlin Strategy,Merlin Strategy,B/C,1.6
 Michigan State University,Michigan State University/YouGov,A,2.8
 Middle Seat,,B/C,1.6
 Miller & Chevalier,Miller & Chevalier,B/C,1.6
 Mitchell Research,Mitchell Research,B/C,1.6
 Mitchell Research & Communications,Mitchell Research & Communications,C-,1.0
+Monmouth University,Monmouth University Polling Institute,A,2.8
 Morning Consult,Morning Consult,B,2.0
 Muhlenberg College Institute of Public Opinion,Muhlenberg College Institute of Public Opinion,A,2.8
 Navigator Research,Global Strategy Group,B/C,1.6
@@ -116,8 +164,10 @@ Norc at the University of Chicago,Norc at the University of Chicago,A/B,2.4
 "Normington, Petts & Associates",Normington Petts & Associates,C/D,1.0
 North Star Opinion Research,North Star Opinion Research,B/C,1.6
 NRSC,NRSC,C/D,1.0
-OnMessage Inc.,OnMessage Inc.,B/C,1.6
+OnMessage Inc.,OnMessage Inc.,A,2.8
 Opinion Diagnostics,Opinion Diagnostics,C/D,1.0
+Opinion Dynamics,Opinion Dynamics,A/B,2.4
+Overton Insights,Overton Insights,C,1.4
 Pan Atlantic SMS Group,Pan Atlantic Research,B/C,1.6
 Patriot Polling,Patriot Polling,B,2.0
 Peak Insights,Moore Information Group,B/C,1.6
@@ -126,16 +176,21 @@ Pew Research Center,Pew Research Center,A,2.8
 Pinnacle Research Group,Pinnacle Research Group,B/C,1.6
 Praecones Analytica,Praecones Analytica,B/C,1.6
 PRRI,PRRI Polling,A-,2.6
-Public Opinion Strategies,Public Opinion Strategies,B,2.0
+Public Opinion Strategies,Public Opinion Strategies,A,2.8
+Public Policy Institute of California,Public Policy Institute of California,A,2.8
 Public Policy Polling,Public Policy Polling,A-,2.6
 Pulse Decision Science,Pulse Decision Science,C/D,1.0
 Pulse Opinion Research,Pulse Opinion Research,C/D,1.0
+"PureSpectrum","Purespectrum",C,1.4
 Quantus Insights,Quantus Insights,B/C,1.6
 Quinnipiac University,Quinnipiac University Poll,A+,3.0
-Rasmussen Reports,Rasmussen Reports,B,2.0
+Rasmussen Reports,Rasmussen Reports,B+,2.2
 Ragnar Research Partners,Ragnar Research Partners,B/C,1.6
 ReaconMR/Siena Research Institude,ReaconMR,A,2.8
+RealClear Opinion Research,RealClear Opinion Research,B/C,1.6
 Remington,Remington Research Group,B,2.0
+Research & Co.,Research & Co.,B/C,1.6
+Research Co.,Research Co.,B/C,1.6
 Research & Polling Inc.,,A+,3.0
 Responsive Management,Responsive Management,C/D,1.0
 RMG Research,RMG Research,B,2.0
@@ -149,7 +204,7 @@ Siena University,Siena University,A+,3.0
 Slingshot Strategies,Slingshot Strategies,B/C,1.6
 SoCal Strategies,SoCal Research,C/D,1.0
 St. Anselm,Saint Anselm College Survey Center,B/C,1.6
-St. Pete Polls,St. Pete Polls,C+,1.4
+St. Pete Polls,St. Pete Polls,C+,1.6
 Stetson University Center for Public Opinion Research,Stetson University Center for Public Opinion Research,B/C,1.6
 Stratus Intelligence,Stratus Intelligence,B,2.0
 Suffolk University,Suffolk University,A-,2.6
@@ -162,36 +217,53 @@ Targoz Market Research,Targoz Market Research,B-,1.8
 Tarrance Group,Tarrance Group,A/B,2.4
 Tavern Research,Tavern Research,C,1.4
 The Alabama Poll,The Alabama Poll,C/D,1.0
+The Argument/Verasight,The Argument/Verasight,B/C,1.6
+The Center for American Women and Politics,The Center for American Women and Politics,B/C,1.6
+The Center for Public Policy and Social Research,The Center for Public Policy and Social Research,B/C,1.6
+The Center for Survey Research,The Center for Survey Research,B/C,1.6
+The Center for the Study of Politics and Governance,The Center for the Study of Politics and Governance,B/C,1.6
+The Center for the Study of Politics and Governance/YouGov,The Center for the Study of Politics and Governance/YouGov,B/C,1.6
 The Bullfinch Group,The Bullfinch Group,C/D,1.0
 The Citadel School of Humanities and Social Sciences,The Citadel School of Humanities and Social Sciences,C/D,1.0
 The Honest Poll,The Honest Poll,C,1.4
 The New York Times/Siena University,The New York Times/Siena University,A+,3.0
+The Public Sentiment Institute,The Public Sentiment Institute,B/C,1.6
+The Real Clear Opinion Research,The Real Clear Opinion Research,B/C,1.6
+The Remington Group,The Remington Group,B,2.0
 The Tyson Group,The Tyson Group,B/C,1.6
 The Washington Post,Washington Post/George Mason University,A,2.8
 The Winston Group,Winston Group,A/B,2.4
+Talker Research,Talker Research,B/C,1.6
 TIPP Insights,TIPP Insights,A,2.8
-Trafalgar Group,InsiderAdvantage,A-,2.6
-Truedot,Truedot,B/C,1.6
+Trafalgar Group,InsiderAdvantage,B,2.0
+Trafalgar Group/InsiderAdvantage,Trafalgar Group/InsiderAdvantage,B,2.0
+TrueDot,Truedot,B/C,1.6
 Tulchin Research,Tulchin,B/C,1.6
+University of Florida,University of Florida Bureau of Economic and Business Research,A/B,2.4
 University of Georgia,University of Georgia School of Public and International Affairs,B/C,1.6
 University of Houston Hobby School of Public Affairs,University of Houston Hobby School of Public Affairs,C/D,1.0
 University of Houston Hobby School of Public Affairs/Texas Southern University School of Public Affairs,University of Houston Hobby School of Public Affairs,B/C,1.6
 University of Massachusetts Department of Political Science/YouGov,University of Massachusetts Department of Political Science/YouGov,C/D,1.0
 University of Massachusetts Lowell Center for Public Opinion/YouGov,University of Massachusetts Lowell Center for Public Opinion,A-,2.6
 University of New Hampshire,University of New Hampshire Survey Center,A-,2.6
-University of North Florida,University of North Florida Public Opinion Research Lab,A,2.8
+University of North Florida,University of North Florida Public Opinion Research Lab,A/B,2.4
 University of Texas at Tyler Center for Opinion Research,University of Texas at Tyler Center for Opinion Research,B/C,1.6
 Upswing Research,Upswing Research,C/D,1.0
-Victory Insights,Victory Insights,B/C,1.6
-Washington Post,Washington Post,A,2.8
+Verasight,Verasight,B/C,1.6
+Victory Insights,Victory Research,B/C,1.6
+Vox Populi Polling,Vox Populi Polling,A/B,2.4
+Washington Post,Washington Post,A+,3.0
 Wedgewood Polls, Wedgewood Polls,C,1.4
-Wick Communications,Wick,B/C,1.6
+Western New England University,Western New England University,A/B,2.4
+Wick,Wick,B/C,1.6
 Winston Group,Winston Group,A/B,2.4
+Wirthlin Worldwide,Wirthlin Worldwide,A/B,2.4
 Workbench Strategy,Workbench Strategy,C/D,1.0
 WPA Intelligence,WPA Intelligence,B/C,1.6
 yes. every kid. foundation.,yes. every kid. foundation.,C/D,1.0
+Yale University Institution for Social and Policy Studies,Yale University Institution for Social and Policy Studies,B+,2.2
 YouGov,YouGov,B+,2.2
 YouGov Blue,YouGov,B+,2.2
 Z to A Research,Z to A Research,C/D,1.0
 Zenith Research,Zenith Research,C/D,1.0
-Zogby Associates,Zogby Analytics,B-,1.8
+Zogby Analytics,Zogby Analytics,B-,1.8
