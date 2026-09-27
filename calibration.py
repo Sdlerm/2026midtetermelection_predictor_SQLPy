@@ -163,10 +163,28 @@ SIGMA_TOTAL_MARGIN_HOUSE_POLLED = 6.0
 # one place a wrong winner could have flattered the sigma.
 SIGMA_TOTAL_MARGIN_HOUSE_LEAN = math.sqrt(8.0**2 + SIGMA_NATIONAL_MARGIN_HOUSE**2)
 
+# States whose 2026 House lines differ from the 119th-Congress lines in
+# data/cd119.geojson. THE one definition: house_model.py and dashboard.py
+# import it (this module is stdlib-only).
+#   TX, NC, OH, FL — 2025-26 legislative mid-decade redraws
+#   CA — Prop 50 (Nov 2025), legislature-drawn map replacing the commission's
+#   UT — 2025 court-ordered remedial map
+#   AL, LA, TN — 2026 redraws after the Supreme Court's April 2026 VRA ruling
+#   (MO passed a map in 2025 but the old one stays in force for November.)
+# A district here only draws the wider _LEAN_REDRAWN sigma when its lean comes
+# from a source NOT in CURRENT_LINES_SOURCES — i.e. its lean may describe old
+# boundaries. With the Downballot 2026-lines base, none do; the set still
+# drives the dashboard's stale-boundaries warning.
+REDRAWN_STATES = {"TX", "NC", "OH", "FL", "CA", "UT", "AL", "LA", "TN"}
+
+# district_lean.csv source tags known to describe 2026 lines.
+# "downballot-2024" is fetch_district_lean.SOURCE_TAG; "override" is hand-sourced.
+CURRENT_LINES_SOURCES = {"downballot-2024", "override"}
+
 # Total error for LEAN-ONLY districts whose LINES HAVE BEEN REDRAWN since the
-# lean vintage. NEW. In 2026 this is the 95 districts in TX/NC/OH/FL that
-# data/district_lean_overrides.csv has not yet given a hand-sourced current
-# figure — the ones fetch_district_lean.py prints a warning about on every run.
+# lean vintage. In 2026 this is districts in REDRAWN_STATES whose lean source is
+# not in CURRENT_LINES_SOURCES — none, since the base moved to the Downballot's
+# 2026-lines sheet. Kept for a late map change or a fallback to an older base.
 #
 # Measured at local SD 16.0, from four readings that bracket it: three decennial
 # redraws at 16.2/17.3/17.5 (13.3/14.4/14.6 once California's wholesale

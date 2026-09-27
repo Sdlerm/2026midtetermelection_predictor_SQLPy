@@ -28,6 +28,7 @@ import house_sensitivity
 import monte_carlo_house as mc_house
 import monte_carlo_senate as mc_senate
 from calibration import (
+    REDRAWN_STATES,
     TILT_MARGIN_THRESHOLD,
     LEAN_MARGIN_THRESHOLD,
     LIKELY_MARGIN_THRESHOLD,
@@ -61,7 +62,6 @@ STATE_FIPS = {
     "WI":"55","WY":"56",
 }
 AT_LARGE = {"AK", "DE", "ND", "SD", "VT", "WY"}   # census GEOIDs use '00'; our DB stores '01'
-REDRAWN  = {"TX", "NC", "OH", "FL"}               # 2025 mid-decade maps; boundary file shows OLD lines
 
 # Rating bins — a diverging D-to-R ramp with NO neutral color in the middle.
 # Every band names a side, so the map's color always answers "who is ahead
@@ -691,7 +691,8 @@ st.caption(
     f"vote-share leader, including the {_h_tilt} inside {TILT_MARGIN_THRESHOLD:g}pt "
     f"(the Tilt bands); nothing is left uncalled · point estimates, control "
     f"probability below · "
-    f"⚠️ TX/NC/OH/FL lean and boundaries are both pre-2025 redraw"
+    f"⚠️ {'/'.join(sorted(REDRAWN_STATES))} are drawn on pre-redraw boundaries "
+    f"(lean data is on the 2026 lines)"
 )
 if os.path.exists(CD_GEOJSON_PATH):
     # Colored swatches, not the plain bullets this used to print: with the

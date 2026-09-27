@@ -10,8 +10,8 @@ load_dotenv()
 API_KEY = os.getenv("FRED_API_KEY")
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 YEAR = 2026
-LAMBDA = 0.03  # approval-poll recency decay (half-life ~23 days). NOT the same as
-               # senate_model.LAMBDA (0.0231, ~30 days) — the comment here claimed a
+LAMBDA = 0.0231  # approval-poll recency decay (half-life ~30 days). NOT the same as
+               # senate_model.LAMBDA (0.0154, ~45 days) — the comment here claimed a
                # parity that has not held since senate_model was retuned. Whether the
                # two SHOULD match is an open modeling question rather than a typo:
                # changing this value moves the approval score and every projection
@@ -51,7 +51,9 @@ FACTOR_META = {
     "REAL_DISPOSABLE_INC":(16000, 21000, -1, lambda v: f"${v:,.0f}B"),
     "GDP_GROWTH":         (-2.0,   4.0,  -1, lambda v: f"{v:.1f}%"),
     "FED_FUNDS_RATE":     (0.0,   5.5,   +1, lambda v: f"{v:.2f}%"),
-   # "PRES_APPROVAL":      (25.0,  69.0,  -1, lambda v: f"{v:.1f}%"),  # higher approval = good for R
+    # Display-only: mirrors APPROVAL_RANGE / APPROVAL_DIRECTION in senate_model.py, where
+    # approval is its own signal (get_approval_score) rather than part of the climate block.
+    "PRES_APPROVAL":      (25.0,  69.0,  -1, lambda v: f"{v:.1f}%"),  # higher approval = good for R
 }
 
 # Thresholds for how far the normalized score deviates from the neutral midpoint (0.5).
@@ -60,6 +62,10 @@ FACTOR_META = {
 # |deviation| < 0.45  → "moderate"
 # else                → "strong"
 _STRENGTH_LABELS = [(0.10, "neutral"), (0.25, "mild"), (0.45, "moderate"), (1.01, "strong")]
+
+# Thresholds for the cumulative line, on |D−R margin shift| in points.
+# Max possible shift is ±(ECON_WEIGHT + APPROVAL_WEIGHT) * 10 * 2 = ±9 pts today.
+_MARGIN_STRENGTH_LABELS = [(1.0, "neutral"), (3.0, "mild"), (5.0, "moderate"), (float("inf"), "strong")]
 
 def interpret_factor(factor_name, value):
     """
@@ -104,11 +110,55 @@ def interpret_factor(factor_name, value):
     if strength == "neutral":
         beneficiary = "no meaningful tilt"
     elif deviation > 0:
-        beneficiary = f"{strength} headwind for R incumbents"
+        beneficiary = f"{strength} headwind for R / tailwind for D"
     else:
-        beneficiary = f"{strength} tailwind for R incumbents"
+        beneficiary = f"{strength} tailwind for R / headwind for D"
 
     return f"{fmt(value)} → {beneficiary}"
+
+
+def interpret_cumulative(year=YEAR):
+    """
+    Summarizes the combined effect of every stored climate factor plus presidential
+    approval, using the model's own math rather than a re-derivation here.
+
+    Imported lazily from senate_model (which only depends on init_db, so there is no
+    cycle) so the summary always matches the adjustment the model will actually apply:
+    get_climate_score()/get_approval_score() read the values just stored, and
+    climate_adjustment()/approval_adjustment() convert them to vote-share points.
+
+    Returns:
+        str: one line giving the combined tilt, the per-candidate vote-share shift for
+        each block, and the implied D−R margin shift.
+    """
+    from senate_model import (
+        get_climate_score, get_approval_score,
+        climate_adjustment, approval_adjustment,
+    )
+
+    climate_adj  = climate_adjustment("D", get_climate_score(year))
+    approval_adj = approval_adjustment("D", get_approval_score(year))
+    total_adj    = climate_adj + approval_adj  # D gains this, R loses it
+    margin_shift = 2 * total_adj
+
+    # Labeled by margin shift, not interpret_factor()'s normalized deviation:
+    # averaging mixed factors shrinks the combined score, so a shift worth
+    # over a point of margin could otherwise read as "neutral".
+    strength = next(label for threshold, label in _MARGIN_STRENGTH_LABELS
+                    if abs(margin_shift) < threshold)
+
+    if strength == "neutral":
+        beneficiary = "no meaningful tilt"
+    elif margin_shift > 0:
+        beneficiary = f"{strength} headwind for R / tailwind for D"
+    else:
+        beneficiary = f"{strength} tailwind for R / headwind for D"
+
+    return (
+        f"{beneficiary} — D vote share {total_adj:+.2f} pts "
+        f"(climate {climate_adj:+.2f}, approval {approval_adj:+.2f}), "
+        f"R {-total_adj:+.2f} pts, D−R margin {margin_shift:+.2f} pts"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +386,8 @@ def fetch_and_store_all():
         fetch_approval_rating(approval_path, year=YEAR)
     else:
         print("  SKIP PRES_APPROVAL — file not found")
+
+    print(f"\n  {'CUMULATIVE':<25} {'':<12}  {interpret_cumulative(YEAR)}")
 
     print("\nAll climate indicators stored.")
 

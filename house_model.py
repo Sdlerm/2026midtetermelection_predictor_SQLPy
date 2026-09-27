@@ -68,13 +68,13 @@ it.
 
 BIAS LEDGER
 -----------
-The lean under ~391 of these districts is 538's 2022-vintage partisan lean —
-2016/2020 presidential results on 2022 maps. It contains no 2024, and for the
-95 districts in redrawn states it describes boundaries that no longer exist
-(see fetch_district_lean.py, which prints them on every run). Unpolled
-projections are therefore materially weaker than polled ones, and weakest of
-all in TX/NC/OH/FL. The honest read: this file now covers the chamber, but
-coverage is not accuracy.
+The lean under the unpolled districts is The Downballot's 2024 presidential
+result on the 2026 lines, relative to the nation (see fetch_district_lean.py).
+Until 2026-09 it was 538's 2022-vintage lean on 2022 maps, which described
+boundaries that no longer exist in every redrawn state. A single-cycle,
+single-candidate lean has its own bias — 2024's Trump-specific swings are baked
+in — so unpolled projections remain materially weaker than polled ones.
+Coverage is not accuracy.
 
 What backtest_house.py added in 2026-08 is the SIZE of that gap, which this
 ledger previously could only assert. Against 2018/2020/2022, a lean on intact
@@ -82,7 +82,7 @@ lines misses by SD ~7.5 and ageing costs about a quarter-point per cycle; a
 lean on redrawn lines misses by SD 16-22. The two are not the same failure and
 the model no longer treats them as one — lean_geometry_is_stale() below routes
 each district to its own sigma. The ordering in the paragraph above turns out
-to be right and the magnitude understated: it is not that TX/NC/OH/FL are
+to be right and the magnitude understated: it is not that the redrawn states are
 "weakest of all", it is that they are twice as weak as everything else.
 """
 
@@ -90,6 +90,7 @@ import csv
 import os
 
 from calibration import (
+    REDRAWN_STATES, CURRENT_LINES_SOURCES,
     TILT_MARGIN_THRESHOLD,
     MIDTERM_SLOPE, MIDTERM_INTERCEPT, MIDTERM_RESIDUAL_SD,
     PRESIDENT_PARTY,
@@ -157,21 +158,13 @@ def load_district_lean(path=DISTRICT_LEAN_PATH):
     return lean, sources
 
 
-# States whose 2026 lines differ from the 2022 lines district_lean.csv's base
-# source describes. Duplicated from fetch_district_lean.REDRAWN rather than
-# imported for the same reason that file duplicates it from dashboard.py: the
-# import would be the only edge between a model file and a data script.
-REDRAWN_STATES = {"TX", "NC", "OH", "FL"}
-
-
 def lean_geometry_is_stale(state, district, lean_sources):
     """
     Does this district's lean describe boundaries that no longer exist?
 
-    True for a district in a 2025-redrawn state that has NOT been given a
-    hand-sourced override. That is the exact condition fetch_district_lean.py
-    prints a warning about on every run; until now nothing downstream acted on
-    it, and all 435 lean-only districts drew the same sigma regardless.
+    True for a district in a redrawn state whose lean source is not in
+    calibration.CURRENT_LINES_SOURCES. With the Downballot 2026-lines base that
+    is no district; it guards a late map change or a fall back to an old base.
 
     backtest_house.py measured what the difference is worth: a lean on intact
     lines misses with SD ~7.5, one on redrawn lines with SD 16-22. So this
@@ -182,7 +175,7 @@ def lean_geometry_is_stale(state, district, lean_sources):
     """
     if state not in REDRAWN_STATES:
         return False
-    return lean_sources.get((state, district)) != "override"
+    return lean_sources.get((state, district)) not in CURRENT_LINES_SOURCES
 
 
 def national_environment_margin(year=2026):
@@ -635,6 +628,6 @@ if __name__ == "__main__":
           f"lean-only {r_leads - r_polled - r_locked}, certain {r_locked})")
     print(f"  Within {TILT_MARGIN_THRESHOLD:g}pt (already counted in the leads above): {tilts}")
     print(f"\n  Seat COUNTS only — not a control probability. Lean-only districts")
-    print(f"  rest on 2022-vintage lean, and those in TX/NC/OH/FL rest on boundaries")
-    print(f"  that no longer exist; see the bias ledger at the top of this file.")
+    print(f"  rest on a single-cycle 2024 presidential lean (2026 lines); see the")
+    print(f"  bias ledger at the top of this file.")
     print(f"{'─'*62}")

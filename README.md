@@ -1,6 +1,6 @@
 # 2026 Midterm Election Predictor
 
-A polling-based forecaster for the 2026 US midterms: full Senate modeling plus Tier 2 House projections covering all 435 districts. The model blends a credibility- and recency-weighted poll average with a structural-lean baseline into projected vote shares per candidate. The Senate adds a six-indicator FRED economic climate score and a presidential approval adjustment; the House instead shifts its district-lean baseline by a national environment term inferred from approval via a midterm regression, because 399 of its 435 districts have no polling and the small share-level nudges left them describing a 2022 presidential map rather than a 2026 midterm. Monte Carlo simulations turn both chambers' point estimates into win probabilities and seat distributions.
+A polling-based forecaster for the 2026 US midterms: full Senate modeling plus Tier 2 House projections covering all 435 districts. The model blends a credibility- and recency-weighted poll average with a structural-lean baseline into projected vote shares per candidate. The Senate adds a six-indicator FRED economic climate score and a presidential approval adjustment; the House instead shifts its district-lean baseline by a national environment term inferred from approval via a midterm regression, because ~370 of its 435 districts have no polling and the small share-level nudges left them describing a presidential-year map rather than a 2026 midterm. District lean is the 2024 presidential result on the 2026 lines, so the 2025-26 redraws are reflected. Monte Carlo simulations turn both chambers' point estimates into win probabilities and seat distributions.
 
 ---
 
@@ -32,10 +32,12 @@ project/
 ├── senate_ingest.py                # Loads Senate polling CSV into the database
 ├── house_ingest.py                 # Loads House polling CSV + district nominee roster
 ├── load_pollster_ratings.py        # Applies pollster letter grades / credibility to the pollsters table
-├── fetch_economics.py              # Pulls FRED indicators + computes weighted approval rating
+├── fetch_economics.py              # Pulls FRED indicators + weighted approval; prints per-factor + cumulative tilt
+├── fetch_district_lean.py          # Builds data/district_lean.csv from Downballot 2024 pres-by-CD (2026 lines)
 ├── load_historical.py              # Loads 2018/2020/2022/2024 Senate results (historical_results table)
 ├── load_historical_polls.py        # Loads 2018/2020 Senate polls (538 mirror) for backtesting
 ├── backtest_senate.py              # Sweeps LEAN_ALPHA against 2018/2020 outcomes; reports bias, sigma, per-cycle optima
+├── backtest_house.py               # Measures House lean σ (intact vs redrawn lines) against 2018/2020/2022
 ├── senate_model.py                 # Point estimates: poll average + lean + econ + approval
 ├── house_model.py                  # House Tier 2 projections (all 435 districts, seat counts, no control probability)
 ├── calibration.py                  # Monte Carlo error constants + race rating thresholds, with provenance
@@ -174,6 +176,26 @@ python fetch_economics.py
 
 Pulls the six FRED indicators into the `climate_factors` table (requires `FRED_API_KEY` in `.env`), and computes a credibility/recency-weighted presidential approval rating from the approval polling CSV in `data/`.
 
+Each factor is printed with an interpretation (e.g. `39.3% → mild headwind for R / tailwind for D`). Per-factor strength comes from how far the value sits from the midpoint of its historical range, after normalizing to [0, 1]:
+
+| \|normalized − 0.5\| | Label |
+|---|---|
+| under 0.10 | neutral ("no meaningful tilt") |
+| 0.10–0.25 | mild |
+| 0.25–0.45 | moderate |
+| 0.45 or more | strong |
+
+A final `CUMULATIVE` line combines all six indicators plus approval, using `senate_model`'s own `climate_adjustment()` + `approval_adjustment()`, and reports the resulting D/R vote-share shift and D−R margin shift. It is labeled by the size of the margin shift (max possible is ±(`ECON_WEIGHT` + `APPROVAL_WEIGHT`) × 20 pts):
+
+| \|D−R margin shift\| | Label |
+|---|---|
+| under 1 pt | neutral ("no meaningful tilt") |
+| 1–3 pts | mild |
+| 3–5 pts | moderate |
+| 5 pts or more | strong |
+
+The cutoffs live in `_STRENGTH_LABELS` and `_MARGIN_STRENGTH_LABELS` in `fetch_economics.py`.
+
 ### Step 4b — Load historical results (optional, one-time)
 
 ```bash
@@ -196,14 +218,16 @@ Prints each state's projected vote shares, the economic climate and approval sco
 python fetch_district_lean.py
 ```
 
-Downloads FiveThirtyEight's district partisan-lean file, merges `data/district_lean_overrides.csv` on top of it, and writes `data/district_lean.csv` (435 districts). **The output is generated — edit the overrides file, not the output.** Re-running re-downloads the base and rebuilds the output; your overrides survive.
+Downloads [The Downballot's 2024 presidential results by district on the 2026 lines](https://www.the-downballot.com/p/the-downballots-calculations-of-presidential) (exact-vote-totals tab), converts each margin to a lean relative to the nation (district D margin − national D margin of −1.65), merges `data/district_lean_overrides.csv` on top of it, and writes `data/district_lean.csv` (435 districts). **The output is generated — edit the overrides file, not the output.** Re-running re-downloads the base and rebuilds the output; your overrides survive.
 
-The base file is **2022 vintage on 2022 maps**. Every run prints the districts in redrawn states (TX/NC/OH/FL — 95 of them) whose lean describes boundaries that no longer exist. Add rows to the overrides file as you source replacements:
+The base covers every 2026 map change (TX, NC, OH, FL, CA, UT, AL, LA, TN; Missouri stays on its old lines, which the sheet reflects). It replaced FiveThirtyEight's 2022-vintage file on 2022 maps in September 2026. Its main bias: it is a single election, so 2024's Trump-specific swings (e.g. heavily Hispanic South Texas seats) are baked into the lean. Overrides must be on the same **relative-to-nation** scale. Convert a raw margin by adding 1.65:
 
 ```csv
 district,dem_margin,note
-TX-35,12.4,2024 pres margin on post-2025 lines
+TX-35,-8.81,"2024 pres D margin -10.46, +1.65 to relative"
 ```
+
+If a district's lean ever comes from a source not listed in `CURRENT_LINES_SOURCES` in `calibration.py`, the run warns, and districts in `REDRAWN_STATES` then draw the wider redrawn-lines Monte Carlo sigma.
 
 ### Step 5b — House Tier 2 projections (optional)
 
@@ -220,7 +244,7 @@ unpolled district:                          (lean + env/2)
 
 `env` is the **national House environment** as a D-minus-R margin, from `national_environment_margin()`. It enters each candidate's *share* at half weight because one point of margin is half a point of two-party vote share, and it shifts the **lean baseline** rather than the finished projection — polls already contain the 2026 environment, so a polled district must not be shifted twice and feels the term only through its 20% lean weight. Rows carry `has_polls` so display can separate the two paths.
 
-Where `env` comes from (in order): a stored `GENERIC_BALLOT_D` climate factor if one has been ingested, otherwise presidential approval run through the midterm regression in `calibration.py` (`MIDTERM_APPROVAL_HISTORY`). At 39.7% approval that inference is **D+7.2**.
+Where `env` comes from (in order): a stored `GENERIC_BALLOT_D` climate factor if one has been ingested, otherwise presidential approval run through the midterm regression in `calibration.py` (`MIDTERM_APPROVAL_HISTORY`). At the current 39.3% approval that inference is **D+7.4** (±2.6).
 
 > **Why this term exists.** Before it, the only 2026 information reaching the 399 unpolled districts was the per-candidate climate and approval nudges: ±0.65 points of share, i.e. a national environment of D+1.3 on the margin scale. That is not a midterm environment, and it left the House pinned to a 2022-vintage *presidential* map while the Senate — every race polled, 80% poll weight — absorbed the real one. The result was a model more confident in Democratic **Senate** control (a net-4 map through TX/AK/OH/IA) than in a Democratic **House**, which inverts the actual difficulty of the two maps. The climate and approval adjustments are no longer applied to House projections at all: the national signal now enters exactly once, through `env`. The Senate still uses them, where they are a small correction on top of polls rather than the only 2026 input.
 
@@ -248,10 +272,10 @@ Districts decided by a **same-party general** are the exception: they carry no D
 
 Two things differ from the Senate version, both forced by the data:
 
--   **Per-district local σ.** Only ~36 districts are polled; the other ~399 rest on `district_lean.csv`. Their error isn't polling error, it's "how wrong is 2022-vintage lean about 2026" — roughly double. So σ_local is a vector selected by `has_polls`, not a scalar.
+-   **Per-district local σ.** Only ~63 districts are polled; the other ~370 rest on `district_lean.csv`. Their error isn't polling error, it's "how wrong is a 2024 presidential lean about a 2026 House race" — larger. So σ_local is a vector selected by `has_polls` (and, for a lean not on current lines, a wider redrawn-lines σ), not a scalar.
 -   **Chunked simulation.** A full 1,000,000 × 435 float64 error matrix is 3.5 GB, and the calculation needs two at once. This version streams in chunks of `SIM_CHUNK_HOUSE` and accumulates. Identical arithmetic, bounded memory — a sanity check asserts two different chunk sizes agree.
 
-⚠️ **The House σ values in `calibration.py` are reasoned, not backtested.** The Senate's trace to published pollster-accuracy work; the House's are argued by analogy from them. Since 399 of 435 districts depend on the lean-only σ, treat P(control) as order-of-magnitude until those numbers are measured against real House results.
+⚠️ **The House lean σ values in `calibration.py` are measured by `backtest_house.py` against 2018/2020/2022 House results** (local SD 8 on intact lines, 16 on redrawn lines). They were measured on 538-style multi-election leans; the current base is a single 2024 election, so treat them as a reasonable, not exact, fit. Most districts depend on the lean-only σ, and the national environment feeding them is still inferred from approval rather than measured.
 
 ### Step 6c — Backtest the Senate poll weighting (optional, one-off)
 
@@ -264,7 +288,7 @@ Rebuilds what the model would have projected on the eve of the 2018 and 2020 Sen
 
 The correctness pivot is the `as_of` date now threaded through `days_ago` → `recency_weight` → `weighted_average_and_stderr` (`None` = today, so live behavior is unchanged). Without it a 2018 poll would be measured as ~8 years stale, its recency weight would round to zero, every historical race would silently collapse to structural lean, and the backtest would be scoring the *lean* model while looking fine.
 
-**Result: `LEAN_ALPHA` is 0.788** (re-measured 2026-08-25, walked from 0.82 via 0.78). Minimizing raw RMSE prefers 0.65 — but that gain is two unrelated biases cancelling, not accuracy: the poll leg runs +3.9 toward D (the 2020 polling miss) and the lean leg −3.8 toward R (`state_lean.csv` is ~2024-vintage and 8.8 points too Republican for 2018). Remove each mix's mean error and the variance-optimal weight — the question a blend weight actually answers — is **0.79, plateau 0.70–0.88**, which 0.788 sits on to three decimals. The per-cycle optima flatly disagree (2018 wants 0.86, 2020 wants 0.28), so the pooled figure is a compromise between two years rather than a measurement. Correcting national bias is `SIGMA_NATIONAL_MARGIN`'s job, not the blend weight's.
+**Backtest result: 0.788** (re-measured 2026-08-25, walked from 0.82 via 0.78). `senate_model.py` currently sets `LEAN_ALPHA = 0.75` (since 2026-09-14), inside the plateau below. Minimizing raw RMSE prefers 0.65 — but that gain is two unrelated biases cancelling, not accuracy: the poll leg runs +3.9 toward D (the 2020 polling miss) and the lean leg −3.8 toward R (`state_lean.csv` is ~2024-vintage and 8.8 points too Republican for 2018). Remove each mix's mean error and the variance-optimal weight — the question a blend weight actually answers — is **0.79, plateau 0.70–0.88**, which 0.788 sits on to three decimals. The per-cycle optima flatly disagree (2018 wants 0.86, 2020 wants 0.28), so the pooled figure is a compromise between two years rather than a measurement. Correcting national bias is `SIGMA_NATIONAL_MARGIN`'s job, not the blend weight's.
 
 ⚠️ **Two cycles, not four.** 538 shut down in 2025 and its polls-page CSVs now return the ABC News HTML shell with a `200` status — a naive downloader saves 314 KB of markup as `.csv`. 2018 and 2020 come from the git-scraped mirror `simonw/fivethirtyeight-polls` (last commit 2021-04-05); 2022 and 2024 Senate polling is not in any mirror found. Sixty races is a usable sample for a per-race blend weight and a useless one for per-cycle error, so this run does **not** license changing `SIGMA_NATIONAL_MARGIN`. Full method, limits, and open items in `BACKTEST_SCOPE.md` §7.
 
@@ -287,7 +311,7 @@ streamlit run dashboard.py
 Opens an interactive web dashboard at `http://localhost:8501` with:
 
 -   **Senate margin map** — continuous D/R gradient; lean-only races (no polls) render at reduced opacity with an explicit hover label, so polled and unpolled projections are visually distinct
--   **House Tier 2 map** — all 435 districts colored by discrete rating bins (Safe/Likely/Lean/Tilt, D and R) driven by the margin thresholds in `calibration.py`. There is **no neutral toss-up bin**: every district is colored for whichever candidate has the greater projected vote share, and margins under `TILT_MARGIN_THRESHOLD` (5 pts) land in the pale Tilt D / Tilt R shades rather than a shared yellow. Closeness is conveyed by the band, not by withholding a call. Lean-only districts render at reduced opacity so coverage never reads as confidence; districts decided by a same-party general render at full opacity and hover as `SAME-PARTY GENERAL, seat certain`, with no vote shares — the opacity channel encodes how much is known, and that is the one basis that knows outright. Requires `data/cd119.geojson` (see Setup §6) and `data/district_lean.csv` (Step 5a). For TX/NC/OH/FL both the boundaries *and* the lean are pre-2025 redraw.
+-   **House Tier 2 map** — all 435 districts colored by discrete rating bins (Safe/Likely/Lean/Tilt, D and R) driven by the margin thresholds in `calibration.py`. There is **no neutral toss-up bin**: every district is colored for whichever candidate has the greater projected vote share, and margins under `TILT_MARGIN_THRESHOLD` (5 pts) land in the pale Tilt D / Tilt R shades rather than a shared yellow. Closeness is conveyed by the band, not by withholding a call. Lean-only districts render at reduced opacity so coverage never reads as confidence; districts decided by a same-party general render at full opacity and hover as `SAME-PARTY GENERAL, seat certain`, with no vote shares — the opacity channel encodes how much is known, and that is the one basis that knows outright. Requires `data/cd119.geojson` (see Setup §6) and `data/district_lean.csv` (Step 5a). For the redrawn states (TX/NC/OH/FL/CA/UT/AL/LA/TN) the *boundaries* are pre-redraw; the lean is on the 2026 lines.
 -   **Senate outlook** — P(D majority ≥51), P(R control ≥50 + VP), mean D seats, the Nebraska independent's win/pivot probabilities, and a seat-distribution histogram colored by which side of the majority line each bar falls on (the blue share of the mass *is* P(D majority))
 -   **House outlook** — P(D majority ≥218), P(R majority), mean D seats, a 90% seat range, the same seat-distribution histogram, and a sortable table of the ~150 competitive districts (P(D win) between 5% and 95%), which is where the House simulation becomes readable — a choropleth can show a rating but not a probability
 -   Senate control banner, projected flips, sortable race table with per-race Monte Carlo win probabilities, and a per-state drilldown
@@ -296,7 +320,7 @@ Both outlook sections run the full 1,000,000 simulations rather than a reduced c
 
 ⚠️ The House probability block carries a standing warning that its σ values are unvalidated. Do not remove it without backtesting the constants first — see Step 6b. The warning's "+1pp national shift" sensitivity is computed live by `house_sensitivity.py`, not typed: it had already gone stale once as a hardcoded string, and the national-environment term moved it by tens of points.
 
-⚠️ **The two chambers' P(control) figures are not on equal footing and should not be read as directly comparable.** Every Senate race is polled and carries 80% poll weight, so the Senate forecast tracks current polling. 399 of 435 House districts have no 2026 polling at all and rest on a lean baseline shifted by an *inferred* national environment. Same simulation machinery, very different evidence underneath.
+⚠️ **The two chambers' P(control) figures are not on equal footing and should not be read as directly comparable.** Every Senate race is polled and carries 75% poll weight (`LEAN_ALPHA`), so the Senate forecast tracks current polling. ~370 of 435 House districts have no 2026 polling at all and rest on a lean baseline shifted by an *inferred* national environment. Same simulation machinery, very different evidence underneath.
 
 ---
 
@@ -328,7 +352,7 @@ The weighted average is: `Σ(pct × credibility × decay) / Σ(credibility × de
 
 ### 3. Poll-lean blend
 
-The model blends the state lean with the poll average using `LEAN_ALPHA` (0.788 — backtested, see Step 6c; `senate_model.py` is the source of truth):
+The model blends the state lean with the poll average using `LEAN_ALPHA` (0.75; the backtest's optimum is 0.788 with a plateau of 0.70–0.88, see Step 6c; `senate_model.py` is the source of truth):
 
 ```
 base_projection = (LEAN_ALPHA × poll_avg) + ((1 - LEAN_ALPHA) × state_lean)
@@ -399,8 +423,8 @@ projected = base_projection
 ```
 
 -   `party_direction`: +1 for D, -1 for R
--   `ECON_WEIGHT`: currently **0.26** → maximum economic adjustment ±2.6 points
--   `APPROVAL_WEIGHT`: currently **0.11** → maximum approval adjustment ±1.1 points
+-   `ECON_WEIGHT`: currently **0.3** → maximum economic adjustment ±3.0 points
+-   `APPROVAL_WEIGHT`: currently **0.15** → maximum approval adjustment ±1.5 points
 
 Races where the finalists land within `TOSSUP_THRESHOLD_PP` (1.2 points) of each other are flagged as toss-ups.
 
@@ -441,19 +465,19 @@ Recency decay rate. Currently `0.0231` (half-life ~30 days). Higher = older poll
 
 `senate_model.py`
 
-Blend between polls (0.788) and structural lean (0.212). Higher = more weight to polls.
+Blend between polls (0.75) and structural lean (0.25). Higher = more weight to polls.
 
 `ECON_WEIGHT`
 
 `senate_model.py`
 
-Economic climate influence. Currently `0.26` (max ±2.6 pts). 0 = no economic adjustment.
+Economic climate influence. Currently `0.3` (max ±3.0 pts). 0 = no economic adjustment.
 
 `APPROVAL_WEIGHT`
 
 `senate_model.py`
 
-Presidential approval influence. Currently `0.11` (max ±1.1 pts).
+Presidential approval influence. Currently `0.15` (max ±1.5 pts).
 
 `TOSSUP_THRESHOLD_PP`
 
@@ -525,7 +549,7 @@ House error σ values
 
 `calibration.py`
 
-`SIGMA_*_HOUSE_*` — reasoned, not backtested. The lean-only σ drives 399 of 435 districts.
+`SIGMA_*_HOUSE_*` — lean σ measured by `backtest_house.py` (2018/2020/2022). The lean-only σ drives ~370 of 435 districts.
 
 `SIM_CHUNK_HOUSE`
 
@@ -549,7 +573,7 @@ District lean values
 
 `data/district_lean_overrides.csv`
 
-Per-district corrections layered over the 538 base. Edit this, never `district_lean.csv`.
+Per-district corrections layered over the Downballot base (relative-to-nation scale). Edit this, never `district_lean.csv`.
 
 ---
 
@@ -585,7 +609,7 @@ The Monte Carlo layer supplements this single-outcome projection with a full sea
 -   **Economic indicators:** Federal Reserve Bank of St. Louis — FRED API
 -   **Nominees:** Manually maintained `senate_nominees.csv` and `house_nominees.csv`
 -   **State lean:** Manually maintained `state_lean.csv`
--   **District lean:** FiveThirtyEight partisan-lean districts file (github.com/fivethirtyeight/data), 2022 vintage on 2022 maps, plus hand overrides — see `fetch_district_lean.py`
+-   **District lean:** The Downballot's 2024 presidential results by congressional district on the 2026 lines (the-downballot.com), converted to relative-to-nation, plus hand overrides — see `fetch_district_lean.py`
 -   **Historical results:** MEDSL precinct-level 2024 data and summary-format 2018/2020/2022 results (`data/*-senate-state.csv`), loaded via `load_historical.py`
 
 ---
@@ -618,14 +642,13 @@ The SQLite database (`db/elections.db`) contains the following tables:
 
 ## Planned Enhancements
 
--   District lean on post-redistricting maps: replace the 95 stale TX/NC/OH/FL rows via `data/district_lean_overrides.csv` (every `fetch_district_lean.py` run lists them)
 -   **Measured** generic ballot for the House — the `GENERIC_BALLOT_D` slot exists and `national_environment_margin()` prefers it automatically; nothing populates it yet, so the environment is inferred from approval (±2.6pp regression residual, n=8). Needs a live feed; 538's `polls-page` CSVs now return HTML
 -   Incumbency term for the House, so the national environment isn't applied as pure uniform swing over a presidential lean
--   Senate poll-weight review — **done 2026-08-10, re-measured 2026-08-25; `LEAN_ALPHA` is 0.788.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: 0.788 is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
+-   Senate poll-weight review — **done 2026-08-10, re-measured 2026-08-25; backtest optimum 0.788, currently set to 0.75.** See Step 6c above and §7 of `BACKTEST_SCOPE.md`. What it does *not* settle: The backtested weight is right on average, but it says nothing about whether a race resting on three July polls of a hypothetical matchup (ME) should be trusted like one resting on 28 polls. That is a poll-depth question, not a blend-weight question, and it is still open
 -   **Incumbency and house-effect terms for the Senate** — the backtest's worst single miss is 2020 ME: predicted D+5.0, actual R+9.1, a 14-point miss against a four-term incumbent. That is the shape of error an incumbency term catches and a blend weight cannot
 -   Backtested House error σ values to replace the reasoned ones in `calibration.py` — the single biggest source of doubt in `monte_carlo_house.py`
 -   Incumbent party for all 435 districts, so flip detection stops being limited to the ~83 rostered ones
--   Updated TX/NC/OH/FL boundary data reflecting the 2025 mid-decade redraws
+-   Updated TX/NC/OH/FL/CA/UT/AL/LA/TN boundary data reflecting the 2025-26 redraws (the lean is already on the new lines; only the map shapes are old)
 -   Extending the backtest past two cycles — 2022/2024 Senate polling is not in any surviving 538 mirror (see `load_historical_polls.py`); recovering it means a different source, not a different script
 -   Climate/approval backfill so `ECON_WEIGHT` and `APPROVAL_WEIGHT` can be backtested too — FRED series are historical by nature, so this is the cheapest remaining win
 -   Automated data refresh via `fetch_nyt_polls.sh` on a cron schedule
