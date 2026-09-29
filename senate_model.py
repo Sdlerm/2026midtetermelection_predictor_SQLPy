@@ -8,7 +8,7 @@ from init_db import get_connection
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LEAN_ALPHA = 0.75
+LEAN_ALPHA = 0.78
 # Poll weight in the blend; the structural lean gets the remaining 0.212.
 # (The comment here read "= 0.2" until 2026-08-10 — stale from when the constant
 # was 0.80, then "= 0.18", then "= 0.22", both on 2026-08-25.
@@ -44,15 +44,15 @@ LEAN_ALPHA = 0.75
 # for. Absorbing it into the blend weight would use the wrong knob and would
 # have made 2018 worse (RMSE 3.78 -> 4.61) to make 2020 better.
 LEAN_ALPHA_BACKTEST_NOTE = "2018+2020, n=59; variance-optimal 0.79 (0.70-0.88)"
-LAMBDA = 0.0154      # recency decay — half-life ~45 days
+LAMBDA = 0.0198      # recency decay — half-life ~35 days
 ECON_WEIGHT = 0.3    # how much economics nudges the poll average; tune this
-APPROVAL_WEIGHT = 0.15
+APPROVAL_WEIGHT = 0.10
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
 TOSSUP_THRESHOLD_PP = 1.2 #if the finalists shares are w/i 1.2pp, flag as "toss-up"
 
-# Minimum plausible sum of the top two candidates' poll averages for the pair to
+# Minimum plausible sum of thectop two candidates' poll averages for the pair to
 # be read as a two-way general-election matchup. Lives here rather than in
 # house_model because both chambers enforce it through two_way_poll_sum_ok();
 # house_model imports it. See that function for why it is a data-KIND check,
