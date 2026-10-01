@@ -1,0 +1,50 @@
+
+Monte Carlo — 500,000 simulated elections
+Baseline seats (not up / unmodeled): D 34, R 31
+
+  MA  100.0%  ████████████████████  Edward J. Markey vs John Deaton
+  RI  100.0%  ████████████████████  Jack Reed vs Raymond McKay
+  DE  100.0%  ████████████████████  Chris Coons vs Michael S. Katz
+  IL  100.0%  ████████████████████  Juliana Stratton vs Don Tracy
+  CO  100.0%  ████████████████████  John Hickenlooper vs Mark Baisley
+  OR   99.7%  ████████████████████  Jeffrey H. Merkley vs David Smith
+  NJ   99.7%  ████████████████████  Cory Booker vs Justin Murphy
+  NM   98.8%  ████████████████████  Ben Ray Lujan vs Larry Marker
+  VA   97.0%  ███████████████████   Mark R. Warner vs Glenn Youngkin
+  ME   95.5%  ███████████████████   Troy Jackson vs Susan M. Collins
+  NH   94.8%  ███████████████████   Chris Pappas vs John E. Sununu
+  MN   93.3%  ███████████████████   Angie Craig vs Michele Tafoya
+  NC   92.8%  ███████████████████   Roy Cooper vs Michael Whatley
+  GA   92.3%  ██████████████████    Jon Ossoff vs Mike Collins
+  AK   76.7%  ███████████████       Mary S. Peltola vs Dan Sullivan
+  MI   70.3%  ██████████████        Abdul El-Sayed vs Mike Rogers
+  OH   68.0%  ██████████████        Sherrod Brown vs Jon Husted
+  TX   61.8%  ████████████          James Talarico vs Ken Paxton
+  IA   37.4%  ███████               Josh Turek vs Ashley Hinson
+  NE   30.7%  ██████                Dan Osborn (I) vs Pete Ricketts
+  SC   21.8%  ████                  Annie Andrews vs Darline Graham
+  FL   21.6%  ████                  Angie Nixon vs Ashley Moody
+  KS   11.6%  ██                    Patrick Schmidt vs Roger Marshall
+  MS    9.0%  ██                    Scott Colom vs Cindy Hyde-Smith
+  AR    2.5%  █                     Hallie Shoffner vs Tom Cotton
+  KY    1.2%                        Charles Booker vs Andy Barr
+  MT    0.3%                        Alani Bankhead vs Kurt Alme
+  AL    0.1%                        Everett Wess vs Barry Moore
+  LA    0.0%                        Jamie Davis vs Julia Letlow
+  SD    0.0%                        Julian Beaudion vs Mike Rounds
+  TN    0.0%                        Marquita Bradshaw vs Bill Hagerty
+  OK    0.0%                        N'Kiyla Jasmine Thomas vs Kevin Hern
+  ID    0.0%                        David Roth vs James E. Risch
+  WV    0.0%                        Rachel Fetty Anderson vs Shelley Moore Capito
+  WY    0.0%                        James A. Byrd vs Harriet Hageman
+
+  Mean D seats: 51.5
+  P(D majority, ≥51):      68.7%
+  P(R control, ≥50 + VP):  28.5%
+  P(Osborn wins NE):       30.7%
+  P(Osborn is the pivot):  2.8%
+
+Sanity checks:
+  [PASS] margin-0 race → 50.0% (want ≈ 50%)
+  [PASS] seat-count SD: correlated 2.16 > independent 1.41
+  [PASS] +1pp D nudge: P(D maj) 68.7% → 79.0%

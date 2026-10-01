@@ -62,3 +62,21 @@ cheat-sheet
 # in the repo means the measured sigmas in calibration.py can be re-checked
 # without depending on fec.gov still serving those document ids.
 /data/backtest/*.xlsx
+/.agents/skills/developing-with-streamlit/
+
+/data/president-averages.csv
+/data/president_approval_polls_backup_2026-09-27.csv
+/data/president_approval_polls_backup_2026-10-01.csv
+/data/president_approval_polls_backup_2026-10-01_scheduled.csv
+/data/senate_backup_2026-09-27.csv
+/data/senate_backup_2026-10-01.csv
+/forecast_history/report_2026-09-14.md
+/forecast_history/report_2026-09-08.md
+/forecast_history/report_2026-08-18.md
+/forecast_history/report_2026-08-10.md
+/forecast_history/report_2026-08-02.md
+/data/president_backup_pretask_2026-09-23.csv
+/data/other.csv
+/data/house_backup_2026-10-01.csv
+/data/house_backup_2026-09-27.csv
+/data/district_lean_538_backup.csv

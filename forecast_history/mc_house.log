@@ -1,0 +1,185 @@
+WARNING: AK-01 polled shares sum to 55.9 (< 60) — not a two-way general-election average; falling back to lean-only for this race.
+
+Monte Carlo — 500,000 simulated elections
+Districts: 434 simulated  (47 polled, 387 lean-only, of which 78 on redrawn lines — marked 'lean*' below and drawing double sigma)
+           1 decided, not simulated (same-party general: CA-07 D)
+
+════════════════════════════════════════════════════════════════════════
+COMPETITIVE DISTRICTS — 154 with P(D) between 5% and 95%
+════════════════════════════════════════════════════════════════════════
+  NY-17   94.8%  ███████████████████   [lean ] +13.9  Cait Conley vs Michael Lawler
+  IL-13   94.7%  ███████████████████   [lean ] +13.8  Democratic candidate vs Republican candidate
+  IL-14   94.6%  ███████████████████   [lean ] +13.8  Democratic candidate vs Republican candidate
+  IN-01   94.5%  ███████████████████   [lean ] +13.6  Democratic candidate vs Republican candidate
+  IL-06   94.2%  ███████████████████   [lean ] +13.5  Democratic candidate vs Republican candidate
+  CA-47   94.2%  ███████████████████   [lean ] +13.4  Democratic candidate vs Republican candidate
+  NJ-05   94.1%  ███████████████████   [lean ] +13.4  Democratic candidate vs Republican candidate
+  FL-25   94.0%  ███████████████████   [lean*] +25.3  Oliver G. Gilbert III vs Te Mayonna Brown
+  CO-07   93.9%  ███████████████████   [lean ] +13.2  Democratic candidate vs Republican candidate
+  CA-49   93.6%  ███████████████████   [lean ] +13.0  Democratic candidate vs Republican candidate
+  NV-04   92.9%  ███████████████████   [lean ] +12.6  Democratic candidate vs Republican candidate
+  CA-45   92.1%  ██████████████████    [lean ] +12.1  Democratic candidate vs Republican candidate
+  NM-03   92.1%  ██████████████████    [lean ] +12.1  Democratic candidate vs Republican candidate
+  TX-35   91.4%  ██████████████████    [polls] +8.2  Johnny Garcia vs Carlos De La Cruz
+  GA-02   91.3%  ██████████████████    [lean ] +11.6  Democratic candidate vs Republican candidate
+  NV-01   90.8%  ██████████████████    [lean ] +11.3  Democratic candidate vs Republican candidate
+  NY-03   90.6%  ██████████████████    [lean ] +11.3  Democratic candidate vs Republican candidate
+  IL-17   89.7%  ██████████████████    [lean ] +10.8  Democratic candidate vs Republican candidate
+  OR-05   89.3%  ██████████████████    [lean ] +10.6  Democratic candidate vs Republican candidate
+  CT-02   88.4%  ██████████████████    [lean ] +10.2  Democratic candidate vs Republican candidate
+  NY-18   88.1%  ██████████████████    [lean ] +10.1  Pat Ryan vs Joseph J. Cinquemani
+  MI-03   88.0%  ██████████████████    [lean ] +10.0  Democratic candidate vs Republican candidate
+  CT-05   87.5%  █████████████████     [lean ] +9.8  Democratic candidate vs Republican candidate
+  TN-09   87.0%  █████████████████     [polls] +6.8  Justin Pearson vs Brent Taylor
+  CA-22   86.8%  █████████████████     [polls] +6.7  Randy Villegas vs David G. Valadao
+  NY-22   86.7%  █████████████████     [lean ] +9.5  Democratic candidate vs Republican candidate
+  NV-03   85.4%  █████████████████     [lean ] +9.0  Democratic candidate vs Republican candidate
+  AZ-04   84.7%  █████████████████     [lean ] +8.8  Democratic candidate vs Republican candidate
+  NC-06   84.4%  █████████████████     [lean*] +16.5  Democratic candidate vs Republican candidate
+  VA-07   84.4%  █████████████████     [lean ] +8.7  Eugene Vindman vs Derrick Anderson
+  MN-02   83.9%  █████████████████     [lean ] +8.5  Matt Little vs Eric Platt
+  FL-23   83.8%  █████████████████     [lean*] +16.1  Lois Frankel vs Deborah Adeimy
+  PA-17   82.3%  ████████████████      [lean ] +8.0  Democratic candidate vs Republican candidate
+  FL-22   81.5%  ████████████████      [polls] +5.4  Pia Dandiya vs Casey Askar
+  WA-08   81.3%  ████████████████      [lean ] +7.6  Democratic candidate vs Republican candidate
+  TX-34   80.8%  ████████████████      [polls] +5.2  Vicente Gonzalez vs Eric Flores
+  TX-28   79.6%  ████████████████      [lean*] +13.4  Henry Cuellar vs Jay Furman
+  TX-15   79.5%  ████████████████      [polls] +4.9  Bobby Pulido vs Monica De La Cruz
+  NC-01   79.0%  ████████████████      [polls] +4.8  Don Davis vs Laurie Buckhout
+  OH-01   78.6%  ████████████████      [polls] +4.7  Greg Landsman vs Eric Conroy
+  IA-01   78.2%  ████████████████      [polls] +4.7  Christina Bohannan vs Mariannette Miller-Meeks
+  FL-09   78.2%  ████████████████      [polls] +4.7  Darren Soto vs Dan Green
+  MD-06   77.1%  ███████████████       [lean ] +6.3  April McClain Delaney vs Robin Ficker
+  NY-19   76.9%  ███████████████       [lean ] +6.3  Democratic candidate vs Republican candidate
+  NH-01   76.8%  ███████████████       [lean ] +6.2  Stefany Shaheen vs Anthony DiLorenzo
+  MI-08   76.2%  ███████████████       [lean ] +6.1  Democratic candidate vs Republican candidate
+  PA-10   74.8%  ███████████████       [polls] +4.0  Janelle Stelson vs Scott Perry
+  NJ-07   74.0%  ███████████████       [polls] +3.9  Rebecca Bennett vs Thomas H. Kean Jr.
+  NM-02   73.8%  ███████████████       [polls] +3.8  Gabe Vasquez vs Greg Cunningham
+  CO-08   71.2%  ██████████████        [lean ] +4.8  Manny Rutinel vs Gabe Evans
+  NE-02   71.0%  ██████████████        [lean ] +4.7  Denise Powell vs Brinker Harding
+  FL-27   69.1%  ██████████████        [lean*] +8.1  Eliott Rodriguez vs Maria Elvira Salazar
+  KS-03   68.4%  ██████████████        [lean ] +4.1  Democratic candidate vs Republican candidate
+  WI-03   68.1%  ██████████████        [polls] +2.8  Rebecca Cooke vs Derrick Van Orden
+  CA-40   65.7%  █████████████         [lean ] +3.5  Esther Kim-Varet vs Ken Calvert, Young Kim
+  PA-07   64.2%  █████████████         [lean ] +3.1  Susan Wild vs Ryan Mackenzie
+  OH-13   63.1%  █████████████         [lean*] +5.5  Democratic candidate vs Republican candidate
+  NC-13   62.1%  ████████████          [lean*] +5.0  Democratic candidate vs Republican candidate
+  IA-02   60.5%  ████████████          [polls] +1.6  Lindsay James vs Joe Mitchell
+  AR-02   60.5%  ████████████          [polls] +1.6  Chris Jones vs French Hill
+  MI-10   58.8%  ████████████          [lean ] +1.9  Christina Hines vs Michael Bouchard
+  FL-28   58.3%  ████████████          [lean*] +3.4  Hector Mujica vs Carlos A. Gimenez
+  PA-08   57.1%  ███████████           [polls] +1.1  Paige Cognetti vs Rob Bresnahan Jr.
+  NY-02   56.0%  ███████████           [lean ] +1.3  Democratic candidate vs Republican candidate
+  CA-41   54.3%  ███████████           [lean ] +0.9  Democratic candidate vs Republican candidate
+  AZ-01   53.8%  ███████████           [lean ] +0.8  Amish Shah vs Thomas (Jay) Feely
+  MI-07   53.5%  ███████████           [polls] +0.5  Bridget Brink vs Tom Barrett
+  VA-02   52.8%  ███████████           [lean ] +0.6  Missy Cotter Smasal vs Jen Kiggans
+  MI-04   52.1%  ██████████            [polls] +0.3  Sean McCann vs Bill Huizenga
+  AZ-06   51.7%  ██████████            [lean ] +0.4  JoAnna Mendonza vs Juan Ciscomani
+  FL-15   50.6%  ██████████            [lean*] +0.2  Democratic candidate vs Republican candidate
+  CA-48   49.4%  ██████████            [polls] -0.1  Marni von Wilpert vs Jim Desmond
+  CA-03   49.1%  ██████████            [lean ] -0.2  Richard Pan vs Kevin Kiley
+  PA-01   47.5%  █████████             [polls] -0.4  Bob Harvie vs Brian Fitzpatrick
+  OH-10   47.2%  █████████             [lean*] -1.1  Amy Cox vs Mike Turner
+  WI-01   43.5%  █████████             [polls] -1.0  Mitchell Berman vs Bryan Steil
+  MT-01   42.3%  ████████              [polls] -1.2  Sam Forstag vs Aaron Flint
+  NC-09   42.0%  ████████              [lean*] -3.3  Democratic candidate vs Republican candidate
+  NJ-02   38.1%  ████████              [lean ] -2.6  Zack Mullock vs Jeff Van Drew
+  NY-01   36.8%  ███████               [polls] -2.0  Chris Gallant vs Nicholas J. LaLota
+  FL-16   36.8%  ███████               [lean*] -5.5  Kelly Kirschner vs Sydney
+Gruters
+  ME-02   36.3%  ███████               [lean ] -3.0  Joseph M. Badacci vs Paul R. LePage
+  FL-11   36.0%  ███████               [polls] -2.2  Joe Strada vs James Pericola
+  FL-21   34.9%  ███████               [lean*] -6.3  Democratic candidate vs Republican candidate
+  FL-26   34.9%  ███████               [lean*] -6.3  Democratic candidate vs Republican candidate
+  NY-11   34.5%  ███████               [lean ] -3.4  Democratic candidate vs Republican candidate
+  FL-07   34.3%  ███████               [lean*] -6.6  Bale Dalton vs Ryan Elijah
+  OH-07   34.0%  ███████               [lean*] -6.7  Matthew Diemer vs Max Miller
+  NC-11   33.7%  ███████               [lean*] -6.9  Democratic candidate vs Republican candidate
+  WA-03   33.0%  ███████               [polls] -2.6  Marie Gluesenkamp Perez vs John Braun
+  NC-14   32.8%  ███████               [polls] -2.6  LaKesha Womack vs Tim Moore
+  TX-23   32.0%  ██████                [polls] -2.8  Katy Padilla Stout vs Brandon Herrera
+  FL-04   31.3%  ██████                [lean*] -8.0  Democratic candidate vs Republican candidate
+  CO-05   31.1%  ██████                [polls] -3.0  Jessica Killin vs Jeff Crank
+  OH-09   30.9%  ██████                [polls] -3.0  Marcy Kaptur vs Derek Merrin
+  FL-13   29.7%  ██████                [polls] -3.2  Leela Gray vs Anna Paulina Luna
+  AZ-02   28.7%  ██████                [polls] -3.4  Jonathan Nez vs Eli Crane
+  FL-02   28.7%  ██████                [lean*] -9.2  Lauren Donahoo vs Jay Trumbell
+  IA-03   26.3%  █████                 [polls] -3.8  Sarah Trone Garriott vs Zach Nunn
+  NY-21   25.9%  █████                 [polls] -3.9  Blake Gendebien vs Anthony Constantino
+  MO-02   25.5%  █████                 [polls] -3.9  Fred Wellman vs Ann Wagner
+  FL-03   25.3%  █████                 [lean*] -10.8  Democratic candidate vs Republican candidate
+  KY-06   24.8%  █████                 [lean ] -5.8  Todd Kelly vs Andy Barr
+  OH-14   24.5%  █████                 [lean*] -11.2  Democratic candidate vs Republican candidate
+  OH-15   23.7%  █████                 [polls] -4.3  Don Leonard vs Mike Carey
+  NV-02   23.5%  █████                 [lean ] -6.2  Lynn Chapman vs Greg Smith
+  SC-01   23.2%  █████                 [polls] -4.4  Mac Deford vs Mark Smith
+  CO-03   20.4%  ████                  [lean ] -7.1  Dwayne L. Romero vs Jeff Hurd
+  AK-01   19.5%  ████                  [lean ] -7.3  John Williams vs Nick Begich
+  VA-01   19.3%  ████                  [lean ] -7.4  Shannon Taylor vs Robert J. Wittman
+  VA-05   18.7%  ████                  [lean ] -7.6  Tom S. P. Perriello vs John J. McGuire III
+  MN-08   18.6%  ████                  [lean ] -7.6  Democratic candidate vs Republican candidate
+  AL-02   18.1%  ████                  [polls] -5.5  Shomari Figures vs Rhett Marques
+  FL-17   17.7%  ████                  [lean*] -15.0  Democratic candidate vs Republican candidate
+  CA-23   17.6%  ████                  [lean ] -7.9  Democratic candidate vs Republican candidate
+  TX-24   17.0%  ███                   [lean*] -15.5  Democratic candidate vs Republican candidate
+  TN-05   16.9%  ███                   [lean ] -8.2  Maryam Abolfazil vs Andy Ogles
+  FL-05   16.4%  ███                   [lean*] -16.0  Democratic candidate vs Republican candidate
+  TX-03   16.0%  ███                   [lean*] -16.2  Democratic candidate vs Republican candidate
+  NC-05   15.6%  ███                   [lean*] -16.5  Democratic candidate vs Republican candidate
+  TX-10   15.0%  ███                   [lean*] -16.8  Democratic candidate vs Republican candidate
+  TX-22   15.0%  ███                   [lean*] -16.8  Democratic candidate vs Republican candidate
+  TX-06   14.3%  ███                   [lean*] -17.4  Democratic candidate vs Republican candidate
+  NC-07   14.2%  ███                   [polls] -6.4  Kimberly Hardy vs David Rouzer
+  TX-12   14.1%  ███                   [lean*] -17.5  Democratic candidate vs Republican candidate
+  TX-21   13.9%  ███                   [lean*] -17.6  Democratic candidate vs Republican candidate
+  WA-05   13.6%  ███                   [lean ] -9.4  Anthony Whisenhunt vs Anthony Jensen
+  MN-01   13.2%  ███                   [polls] -6.7  Jake Johnson vs Brad Finstad
+  CA-05   13.2%  ███                   [lean ] -9.5  Democratic candidate vs Republican candidate
+  GA-12   13.1%  ███                   [lean ] -9.6  Democratic candidate vs Republican candidate
+  TX-08   12.3%  ██                    [lean*] -18.9  Democratic candidate vs Republican candidate
+  FL-19   12.1%  ██                    [lean*] -19.0  Victor Arias vs Jim Schwartzel
+  TX-26   11.8%  ██                    [lean*] -19.3  Democratic candidate vs Republican candidate
+  TX-38   11.2%  ██                    [lean*] -19.8  Democratic candidate vs Republican candidate
+  OH-08   11.2%  ██                    [lean*] -19.8  Democratic candidate vs Republican candidate
+  TX-05   11.0%  ██                    [lean*] -20.0  Democratic candidate vs Republican candidate
+  TX-17   10.7%  ██                    [lean*] -20.2  Democratic candidate vs Republican candidate
+  FL-06   10.5%  ██                    [lean*] -20.5  Democratic candidate vs Republican candidate
+  TX-31   10.4%  ██                    [lean*] -20.5  Democratic candidate vs Republican candidate
+  NE-01   10.4%  ██                    [polls] -7.5  Chris Backemeyer vs Mike Flood
+  NC-03    9.8%  ██                    [lean*] -21.0  Raymond Smith vs Greg Murphy
+  TX-27    9.8%  ██                    [lean*] -21.0  Democratic candidate vs Republican candidate
+  FL-18    8.9%  ██                    [lean*] -22.0  Democratic candidate vs Republican candidate
+  OH-05    8.3%  ██                    [lean*] -22.6  Democratic candidate vs Republican candidate
+  TX-02    7.9%  ██                    [lean*] -22.9  Democratic candidate vs Republican candidate
+  TX-25    7.7%  ██                    [lean*] -23.2  Democratic candidate vs Republican candidate
+  GA-01    7.6%  ██                    [lean ] -12.2  Democratic candidate vs Republican candidate
+  TX-04    7.2%  █                     [lean*] -23.7  Democratic candidate vs Republican candidate
+  OH-06    7.1%  █                     [lean*] -23.8  Democratic candidate vs Republican candidate
+  SC-02    7.0%  █                     [lean ] -12.6  Democratic candidate vs Republican candidate
+  WI-08    7.0%  █                     [lean ] -12.6  Democratic candidate vs Republican candidate
+  TN-07    5.7%  █                     [lean ] -13.5  Democratic candidate vs Republican candidate
+  KS-02    5.5%  █                     [lean ] -13.6  Democratic candidate vs Republican candidate
+  FL-12    5.1%  █                     [lean*] -26.7  Democratic candidate vs Republican candidate
+
+  165 district(s) at P(D) ≥ 95%, 115 at ≤ 5% — not itemized.
+
+────────────────────────────────────────────────────────────────────────
+  Mean D seats:   239.6   (median 240, 90% range 213–267)
+  Mean R seats:   195.4
+  P(D majority, ≥218):  90.9%
+  P(R majority, ≥218):  9.1%
+
+  387 of 434 districts are lean-only (78 of those on 2025-redrawn lines, drawing
+  double sigma). Those sigmas are MEASURED — backtest_house.py, three
+  cycles — but the national environment feeding them is still inferred
+  from approval. See the House section of calibration.py.
+────────────────────────────────────────────────────────────────────────
+
+Sanity checks:
+  [PASS] margin-0 district → 49.8% (want ≈ 50%)
+  [PASS] seat-count SD: correlated 16.43 > independent 5.05
+  [PASS] +1pp D nudge: P(D maj) 91.1% → 95.3%
+  [PASS] chunk invariance: mean D seats 239.64 vs 239.61 (Δ 0.026)
+  [PASS] same +6.0 margin, three tiers: polled 84.1% > lean 75.9% > redrawn lean 64.3%
