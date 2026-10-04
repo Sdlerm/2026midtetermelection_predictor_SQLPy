@@ -290,6 +290,17 @@ def fetch_approval_rating(filepath, year=2026):
     """
     df = pd.read_csv(filepath)
 
+    # Guard: the approval CSV and the horse-race CSV share most columns, so a
+    # wrong download otherwise surfaces as a cryptic KeyError below
+    required = {"politician", "yes", "population", "poll_id", "end_date", "pollster"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"{filepath} is missing approval columns {sorted(missing)} — "
+            "did you download the horse-race polls file instead of the "
+            "presidential approval file?"
+        )
+
     # Step 1 — filter to Trump only, real population groups
     df = df[
         (df["politician"] == "Donald Trump") &
@@ -366,6 +377,88 @@ def fetch_approval_rating(filepath, year=2026):
     con.close()
 
 # ---------------------------------------------------------------------------
+# Generic congressional ballot from the NYT House CSV
+# ---------------------------------------------------------------------------
+
+GENERIC_LAMBDA = 0.0198  # matches senate_model.LAMBDA (~35-day half-life). The
+                         # generic ballot moves on the timescale of race polls,
+                         # not the ~15-day approval decay above.
+
+def fetch_generic_ballot(filepath, year=2026):
+    """
+    Weighted national generic-ballot margin (D minus R, in points), stored as
+    the GENERIC_BALLOT_D climate factor. house_model.national_environment_margin()
+    prefers this over the approval regression, and senate_model uses it to shift
+    the baseline of unpolled and thinly polled races.
+
+    Source rows are house.csv's national questions (state == 'US'). senate.csv
+    carries no generic-ballot questions, so both chambers read the same number.
+
+    Per poll: one population (lv > rv > a), and the questions within it averaged
+    — some pollsters ask with and without leaners. Per pollster: only the most
+    recent poll counts, so weekly trackers (YouGov, Morning Consult) get one
+    vote like everyone else instead of a dozen. The remaining polls are weighted
+    by pollster grade x recency, the same scheme as fetch_approval_rating.
+    """
+    df = pd.read_csv(filepath)
+    df = df[
+        (df["state"] == "US") &
+        (df["cycle"] == year) &
+        (df["stage"] == "general") &
+        (df["party"].isin(["DEM", "REP"])) &
+        (df["population"].isin(["lv", "rv", "a"]))
+    ].copy()
+    if df.empty:
+        print("  SKIP GENERIC_BALLOT_D — no national generic-ballot rows")
+        return
+
+    df["end_date"] = pd.to_datetime(df["end_date"], format="mixed", errors="coerce")
+    df["pct"] = pd.to_numeric(df["pct"], errors="coerce")
+    df = df.dropna(subset=["end_date", "pct"])
+
+    # One D-minus-R margin per question; a question missing either side is dropped
+    q = df.pivot_table(index=["poll_id", "question_id", "pollster", "population", "end_date"],
+                       columns="party", values="pct", aggfunc="sum").reset_index()
+    q = q.dropna(subset=["DEM", "REP"])
+    q["margin"] = q["DEM"] - q["REP"]
+
+    # Best population per poll, then average that population's questions
+    q["pop_rank"] = q["population"].map({"lv": 0, "rv": 1, "a": 2})
+    q = q[q["pop_rank"] == q.groupby("poll_id")["pop_rank"].transform("min")]
+    polls = q.groupby(["poll_id", "pollster", "end_date"], as_index=False)["margin"].mean()
+
+    # Latest poll per pollster
+    polls = polls.sort_values("end_date").drop_duplicates(subset=["pollster"], keep="last")
+
+    grade_lookup = load_grade_lookup()
+    today = date.today()
+    numerator = denominator = 0.0
+    for _, row in polls.iterrows():
+        credibility = grade_lookup.get(str(row["pollster"]).strip(), 1.0)
+        days = (today - row["end_date"].date()).days
+        weight = credibility * math.exp(-GENERIC_LAMBDA * days)
+        numerator   += row["margin"] * weight
+        denominator += weight
+
+    if denominator == 0:
+        print("  SKIP GENERIC_BALLOT_D — no valid rows")
+        return
+
+    margin = round(numerator / denominator, 2)
+    print(f"  {'GENERIC_BALLOT_D':<25} {margin:<12}  "
+          f"D{margin:+.1f} margin from {len(polls)} pollsters' latest polls")
+
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute("""
+        INSERT INTO climate_factors (year, factor_name, value)
+        VALUES (?, ?, ?)
+        ON CONFLICT(year, factor_name) DO UPDATE SET value = excluded.value
+    """, (year, "GENERIC_BALLOT_D", margin))
+    con.commit()
+    con.close()
+
+# ---------------------------------------------------------------------------
 # FRED fetch + store
 # ---------------------------------------------------------------------------
 
@@ -415,6 +508,13 @@ def fetch_and_store_all():
         fetch_approval_rating(approval_path, year=YEAR)
     else:
         print("  SKIP PRES_APPROVAL — file not found")
+
+    # Generic congressional ballot from the NYT House CSV
+    house_path = os.path.join(os.path.dirname(__file__), "data", "house.csv")
+    if os.path.exists(house_path):
+        fetch_generic_ballot(house_path, year=YEAR)
+    else:
+        print("  SKIP GENERIC_BALLOT_D — file not found")
 
     print(f"\n  {'CUMULATIVE':<25} {'':<12}  {interpret_cumulative(YEAR)}")
 

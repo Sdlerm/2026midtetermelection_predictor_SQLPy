@@ -45,13 +45,15 @@ sigmas are measured against 2018/2020/2022 rather than argued from the Senate by
 analogy, and validated bin by bin (backtest_house.py §4). Two things are still
 not measured, and they bound how far these probabilities can be trusted —
 SIGMA_TOTAL_MARGIN_HOUSE_POLLED, which has no district-poll archive to test
-against, and the national environment, which is inferred from presidential
-approval rather than read off a generic ballot. See calibration.py.
+against, and the error on the national environment. That environment is now
+read off the generic ballot (GENERIC_BALLOT_D, fetch_economics.py) when it is
+stored, but SIGMA_NATIONAL_MARGIN_HOUSE was sized for the approval regression
+it replaced and has not been re-measured. See calibration.py.
 """
 
 import numpy as np
 
-from house_model import predict_house_races
+from house_model import predict_house_races, national_environment_margin
 from calibration import (
     SIGMA_NATIONAL_MARGIN_HOUSE,
     SIGMA_LOCAL_MARGIN_HOUSE_POLLED,
@@ -423,8 +425,9 @@ if __name__ == "__main__":
     print(f"\n  {results['n_lean_only']} of {len(races)} districts are lean-only "
           f"({results['n_lean_redrawn']} of those on 2025-redrawn lines, drawing")
     print(f"  double sigma). Those sigmas are MEASURED — backtest_house.py, three")
-    print(f"  cycles — but the national environment feeding them is still inferred")
-    print(f"  from approval. See the House section of calibration.py.")
+    _env, _env_source = national_environment_margin()
+    print(f"  cycles. National environment: D{_env:+.1f} from {_env_source}.")
+    print(f"  See the House section of calibration.py.")
     print(f"{'─'*72}")
 
     run_sanity_checks(races, base_d, base_r)

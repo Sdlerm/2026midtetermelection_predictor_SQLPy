@@ -30,14 +30,18 @@ WHAT TIER 2 STILL DOES NOT DO
     sigmas. What this file DOES owe it is the routing: every row carries
     has_polls and lean_redrawn, and between them those two flags pick which of
     three measured sigmas the district draws.
-  * NO MEASURED generic ballot. 538's generic-ballot feed is dead (its polls-
-    page CSVs all return HTML now), so the national environment is INFERRED
-    from presidential approval via the midterm regression in calibration.py
-    rather than measured. national_environment_margin() prefers a stored
-    GENERIC_BALLOT_D factor and falls back to the regression, so ingesting real
-    generic-ballot polling upgrades this automatically. Until then the
-    environment term carries a ~2.6pp regression residual on top of everything
-    else, which is why SIGMA_NATIONAL_MARGIN_HOUSE is not small.
+  * The generic ballot is MEASURED again as of 2026-10. 538's feed is dead,
+    but the NYT house.csv carries national generic-ballot questions
+    (state == 'US'); fetch_economics.fetch_generic_ballot averages them into
+    the GENERIC_BALLOT_D factor, which national_environment_margin() prefers.
+    The approval regression remains the fallback when that factor is absent.
+    SIGMA_NATIONAL_MARGIN_HOUSE was sized against the regression's ~2.6pp
+    residual and has NOT been re-sized for the measured ballot: generic-ballot
+    polls carry their own few-point October error, so leaving it is defensible
+    but unmeasured.
+  * Districts with fewer than 2 matched polls get half the poll weight
+    (senate_model.SPARSE_POLL_COUNT / SPARSE_ALPHA_SCALE, provisional), so one
+    often-sponsored poll no longer outweighs the environment-shifted lean 4:1.
   * NO INCUMBENCY, and it is now measured. house_nominees.csv names an incumbent
     in only ~110 districts, so uniform swing is applied to a presidential lean
     with no incumbency correction. This matters most where it is least visible:
@@ -101,6 +105,7 @@ from senate_model import (
     get_climate_score, climate_adjustment,
     get_approval_score, approval_adjustment,
     _finalize_race, two_way_poll_sum_ok, matched_poll_blocks,
+    effective_alpha,
 )
 from house_ingest import load_house_nominees, _pad
 
@@ -187,8 +192,8 @@ def national_environment_margin(year=2026):
 
     1. A stored GENERIC_BALLOT_D climate factor, read as the D-minus-R generic
        ballot margin. This is the real measurement, and init_db.py has always
-       named the slot for it; nothing populates it yet because 538's generic-
-       ballot feed went dead. Ingest one and it takes over automatically.
+       named the slot for it; fetch_economics.fetch_generic_ballot fills it
+       from house.csv's national questions.
 
     2. Otherwise, presidential approval run through the midterm regression in
        calibration.py. The relationship is thin (n=8) but it is the right SHAPE:
@@ -408,6 +413,10 @@ def predict_house_races(year=2026):
             contenders.append((party, info, row[0]))
 
         blocks = matched_poll_blocks(race_id, [c[2] for c in contenders])
+        # Fewer than 2 matched polls: halve the poll weight (see
+        # senate_model.SPARSE_POLL_COUNT). The lean leg already carries the
+        # national environment, so the freed weight goes to it unchanged.
+        alpha = effective_alpha(LEAN_ALPHA_HOUSE, len(blocks))
 
         for party, info, candidate_id in contenders:
             poll_avg, poll_stderr = weighted_average_and_stderr(
@@ -418,8 +427,7 @@ def predict_house_races(year=2026):
             lean = district_lean_baseline(state, district, party, district_lean, env)
             # The environment is inside `lean`, so it reaches a polled district
             # only at (1-alpha) weight — the polls already carry 2026.
-            projected = round(LEAN_ALPHA_HOUSE * poll_avg
-                              + (1 - LEAN_ALPHA_HOUSE) * lean, 2)
+            projected = round(alpha * poll_avg + (1 - alpha) * lean, 2)
 
             finalists.append({
                 "state": state, "district": district,
@@ -430,6 +438,8 @@ def predict_house_races(year=2026):
                 "projected": projected,
                 "poll_stderr": poll_stderr,
                 "has_polls": True,
+                "n_polls": len(blocks),
+                "alpha": alpha,
                 "lean_redrawn": lean_geometry_is_stale(state, district, lean_sources),
                 "is_incumbent": info.get("is_incumbent", False),
                 "incumbent_party": incumbent_party,

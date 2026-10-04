@@ -196,7 +196,8 @@ def _house_env_note():
     next to the probabilities it drives."""
     env, source = national_environment_margin()
     return (f"The national environment applied to every district is **D{env:+.1f}** "
-            f"on the margin scale, from {source}; it is inferred, not measured, "
+            f"on the margin scale, from {source}"
+            f"{',' if '(measured)' in source else '; it is inferred, not measured,'} "
             f"and it moves the seat total more than any other single input.")
 
 

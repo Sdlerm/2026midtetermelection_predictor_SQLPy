@@ -59,6 +59,17 @@ TOSSUP_THRESHOLD_PP = 1.2 #if the finalists shares are w/i 1.2pp, flag as "toss-
 # not an undecided knob.
 MIN_TWO_WAY_POLL_SUM = 60.0
 
+# Sparse-poll shrinkage. A race resting on fewer than SPARSE_POLL_COUNT matched
+# polls (one head-to-head question, often candidate-sponsored) gets its poll
+# weight scaled by SPARSE_ALPHA_SCALE, and the freed weight goes to a baseline
+# shifted by the measured generic ballot. Both chambers use it; house_model
+# imports it. PROVISIONAL — not backtested: historical district polls are
+# unobtainable (BACKTEST_SCOPE.md §7), and the Senate backtest has too few
+# single-poll races to resolve a scale. 0.5 halves the trust in one poll, so
+# Senate alpha 0.82 -> 0.41 and House 0.80 -> 0.40.
+SPARSE_POLL_COUNT = 2
+SPARSE_ALPHA_SCALE = 0.5
+
 
 NOMINEES_PATH = os.path.join(os.path.dirname(__file__), "senate_nominees.csv")
 STATE_LEAN_PATH = os.path.join(os.path.dirname(__file__), "state_lean.csv")
@@ -477,6 +488,31 @@ def get_approval_score(year=2026):
     normalized = max(0.0, min(1.0, (value - low) / (high - low)))
     return round((normalized - 0.5) * 2 * APPROVAL_DIRECTION, 3)
 
+def get_generic_ballot(year=2026):
+    """
+    Measured generic-ballot margin (D minus R, points) from the GENERIC_BALLOT_D
+    climate factor that fetch_economics.fetch_generic_ballot stores, or None.
+
+    No regression fallback here, unlike house_model.national_environment_margin:
+    without a measurement the Senate keeps its econ/approval nudges, which are
+    what it has always used.
+    """
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute(
+        "SELECT value FROM climate_factors WHERE year = ? AND factor_name = 'GENERIC_BALLOT_D'",
+        (year,),
+    )
+    row = cur.fetchone()
+    con.close()
+    return None if row is None else round(float(row[0]), 2)
+
+
+def effective_alpha(alpha, n_polls):
+    """Poll weight for a race with n_polls matched polls; see SPARSE_POLL_COUNT."""
+    return alpha * SPARSE_ALPHA_SCALE if n_polls < SPARSE_POLL_COUNT else alpha
+
+
 def national_env_party(party):
     """
     Resolves a ballot party label to the side of the national environment the
@@ -551,16 +587,23 @@ def load_state_lean():
                 lean[state] = float(margin)
     return lean
 
-def lean_baseline(state, party, state_lean):
+def lean_baseline(state, party, state_lean, env_margin=0.0):
     """
     Structural baseline as a vote-share %, derived from the stored signed margin.
     margin = dem_share - rep_share = dem_share - (100 - dem_share) = 2*dem_share - 100,
     so dem_share = margin/2 + 50
+
+    env_margin is a national D-minus-R margin (the generic ballot) and shifts
+    the lean by uniform swing, the same as house_model.district_lean_baseline.
+    state_lean.csv is relative to the nation (swing states sit near 0), which
+    is what makes the shift valid. Default 0.0 = the unshifted lean that
+    backtest_senate.py measured.
     """
     margin = state_lean.get(state)
     if margin is None:
         return 50.0 # Unknown state: neutral, no structural pull
 
+    margin += env_margin
     dem_share = 50.00 + margin/2.00
     rep_share = 50.00 - margin/2.00
 
@@ -710,6 +753,7 @@ def predict_all_races(year=2026):
     nominees_state_count = len({s for (s, _) in nominees})
     climate             = get_climate_score(year)
     approval             = get_approval_score(year)
+    env                  = get_generic_ballot(year)   # None = not yet fetched
 
 
     con = get_connection()
@@ -746,6 +790,13 @@ def predict_all_races(year=2026):
 
         blocks = matched_poll_blocks(race_id, [c[2] for c in contenders])
 
+        # Thinly polled race with a measured generic ballot: shrink the poll
+        # weight and blend against a generic-ballot-shifted lean instead of the
+        # bare lean + econ/approval nudges. The nudges are dropped because the
+        # generic ballot already carries the national environment they proxy.
+        sparse = len(blocks) < SPARSE_POLL_COUNT and env is not None
+        alpha = effective_alpha(LEAN_ALPHA, len(blocks)) if sparse else LEAN_ALPHA
+
         for party, nominee_info, candidate_id in contenders:
             name = nominee_info["name"]
 
@@ -754,11 +805,14 @@ def predict_all_races(year=2026):
             if poll_avg is None:
                 continue
 
-            adjustment = climate_adjustment(party, climate)
-            approval_adj = approval_adjustment(party, approval)
-
-            lean = lean_baseline(state, party, state_lean)
-            blended = LEAN_ALPHA*poll_avg + (1-LEAN_ALPHA)*lean
+            if sparse:
+                adjustment = approval_adj = 0.0
+                lean = lean_baseline(state, party, state_lean, env)
+            else:
+                adjustment = climate_adjustment(party, climate)
+                approval_adj = approval_adjustment(party, approval)
+                lean = lean_baseline(state, party, state_lean)
+            blended = alpha*poll_avg + (1-alpha)*lean
             projected = round(blended + adjustment + approval_adj, 2)
 
             incumbent_party = nominee_info["incumbent_party"]
@@ -772,6 +826,9 @@ def predict_all_races(year=2026):
                 "poll_avg": poll_avg,
                 "poll_stderr": poll_stderr,
                 "has_polls": True,
+                "n_polls": len(blocks),
+                "alpha": alpha,
+                "env": env if sparse else None,
                 "lean": round(lean, 2),
                 "blended": round(blended, 2),
                 "adjustment": adjustment,
@@ -806,12 +863,17 @@ def predict_all_races(year=2026):
         finalists = []
         for party in [p for (s, p) in nominees if s == state]:
             info = nominees[(state, party)]
-            lean = lean_baseline(state, party, state_lean)
-            projected = round(
-                lean
-                + climate_adjustment(party, climate)
-                + approval_adjustment(party, approval), 2
-            )
+            # With a measured generic ballot, the environment shifts the lean
+            # (uniform swing, as house_model does for unpolled districts) and
+            # replaces the econ/approval nudges rather than stacking on them.
+            if env is not None:
+                lean = lean_baseline(state, party, state_lean, env)
+                adjustment = approval_adj = 0.0
+            else:
+                lean = lean_baseline(state, party, state_lean)
+                adjustment = climate_adjustment(party, climate)
+                approval_adj = approval_adjustment(party, approval)
+            projected = round(lean + adjustment + approval_adj, 2)
             finalists.append({
                 "state": state,
                 "name": info["name"],
@@ -819,10 +881,13 @@ def predict_all_races(year=2026):
                 "poll_avg": None,
                 "poll_stderr": None,
                 "has_polls": False,
+                "n_polls": 0,
+                "alpha": 0.0,
+                "env": env,
                 "lean": round(lean, 2),
                 "blended": round(lean, 2),   # blend degenerates to pure lean
-                "adjustment": climate_adjustment(party, climate),
-                "approval_adjustment": approval_adjustment(party, approval),
+                "adjustment": adjustment,
+                "approval_adjustment": approval_adj,
                 "projected": projected,
                 "incumbent_party": info["incumbent_party"],
                 "is_incumbent": (party == info["incumbent_party"]),
