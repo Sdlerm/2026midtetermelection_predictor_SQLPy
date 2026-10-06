@@ -171,7 +171,7 @@ Updates `pollsters.credibility` and adds a letter `grade` from `pollster_ratings
 ### Step 4 — Fetch economic indicators + approval
 
 ```bash
-python fetch_economics.py
+python3 fetch_economics.py
 ```
 
 Pulls the six FRED indicators into the `climate_factors` table (requires `FRED_API_KEY` in `.env`), and computes a credibility/recency-weighted presidential approval rating from the approval polling CSV in `data/`.
@@ -199,7 +199,7 @@ The cutoffs live in `_STRENGTH_LABELS` and `_MARGIN_STRENGTH_LABELS` in `fetch_e
 ### Step 4b — Load historical results (optional, one-time)
 
 ```bash
-python load_historical.py
+python3 load_historical.py
 ```
 
 Loads 2018, 2020, 2022, and 2024 Senate election results into the `historical_results` table, for reference and future backtesting work. Two parsers handle the two source formats: the 2018/2020/2022 files are already one winner + one runner-up row per race; the 2024 MEDSL file is precinct-level and gets aggregated to statewide totals first. Not part of the core prediction pipeline; idempotent.
@@ -207,7 +207,7 @@ Loads 2018, 2020, 2022, and 2024 Senate election results into the `historical_re
 ### Step 5 — Run point-estimate predictions
 
 ```bash
-python senate_model.py
+python3 senate_model.py
 ```
 
 Prints each state's projected vote shares, the economic climate and approval scores, toss-up flags, and the projected Senate control outcome.
@@ -215,7 +215,7 @@ Prints each state's projected vote shares, the economic climate and approval sco
 ### Step 5a — District lean data (required once, before House projections)
 
 ```bash
-python fetch_district_lean.py
+python3 fetch_district_lean.py
 ```
 
 Downloads [The Downballot's 2024 presidential results by district on the 2026 lines](https://www.the-downballot.com/p/the-downballots-calculations-of-presidential) (exact-vote-totals tab), converts each margin to a lean relative to the nation (district D margin − national D margin of −1.65), merges `data/district_lean_overrides.csv` on top of it, and writes `data/district_lean.csv` (435 districts). **The output is generated — edit the overrides file, not the output.** Re-running re-downloads the base and rebuilds the output; your overrides survive.
@@ -232,7 +232,7 @@ If a district's lean ever comes from a source not listed in `CURRENT_LINES_SOURC
 ### Step 5b — House Tier 2 projections (optional)
 
 ```bash
-python house_model.py
+python3 house_model.py
 ```
 
 Projects **all 435 districts**:
@@ -255,7 +255,7 @@ A district whose top two poll averages sum to less than `MIN_TWO_WAY_POLL_SUM` (
 ### Step 6 — Monte Carlo simulation (Senate)
 
 ```bash
-python monte_carlo_senate.py
+python3 monte_carlo_senate.py
 ```
 
 Runs 1,000,000 simulated elections on top of the model's adjusted margins and prints per-race win probabilities, the mean Democratic seat count, P(D majority), P(R control), and Nebraska-specific probabilities (see below).
@@ -263,7 +263,7 @@ Runs 1,000,000 simulated elections on top of the model's adjusted margins and pr
 ### Step 6b — Monte Carlo simulation (House)
 
 ```bash
-python monte_carlo_house.py
+python3 monte_carlo_house.py
 ```
 
 Same 1,000,000 simulations, same `margin + national_error + local_error` structure, over all 435 districts. Prints per-district win probabilities for competitive seats, the D/R seat distribution with a 90% range, and P(D majority ≥ 218). Runs in ~5 seconds at ~700 MB.
@@ -280,8 +280,8 @@ Two things differ from the Senate version, both forced by the data:
 ### Step 6c — Backtest the Senate poll weighting (optional, one-off)
 
 ```bash
-python load_historical_polls.py     # 2018 + 2020 polls -> DB (one-off)
-python backtest_senate.py --both    # sweep LEAN_ALPHA, weighted and unweighted
+python3 load_historical_polls.py     # 2018 + 2020 polls -> DB (one-off)
+python3 backtest_senate.py --both    # sweep LEAN_ALPHA, weighted and unweighted
 ```
 
 Rebuilds what the model would have projected on the eve of the 2018 and 2020 Senate elections, then sweeps `LEAN_ALPHA` from 0 to 1 to find the value that minimizes error against what actually happened. **59 races scored.** Safe to run repeatedly: the ingest is year-scoped to 2018/2020 and registers pollsters insert-only, so it cannot alter the live 2026 forecast — verified by hashing the 2026 projection before and after.
@@ -297,7 +297,7 @@ The correctness pivot is the `as_of` date now threaded through `days_ago` → `r
 **Matplotlib charts:**
 
 ```bash
-python charts.py
+python3 charts.py
 ```
 
 Generates a margin bar chart, a projected seat-count chart, and a vote-share comparison chart. Saved to `data/charts/` as `margins.png`, `seat_count.png`, and `vote_shares.png`.

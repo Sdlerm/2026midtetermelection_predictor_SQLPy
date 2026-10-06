@@ -3,11 +3,17 @@ import math
 import requests
 import pandas as pd
 from datetime import date
-from dotenv import load_dotenv
 from init_db import get_connection
 from load_pollster_ratings import RATINGS_PATH
 
-load_dotenv()
+env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.isfile(env_path):
+    with open(env_path, encoding="utf-8") as env_file:
+        for line in env_file:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 API_KEY = os.getenv("FRED_API_KEY")
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 YEAR = 2026
