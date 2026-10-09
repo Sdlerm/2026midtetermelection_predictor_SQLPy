@@ -45,8 +45,8 @@ LEAN_ALPHA = 0.82
 # have made 2018 worse (RMSE 3.78 -> 4.61) to make 2020 better.
 LEAN_ALPHA_BACKTEST_NOTE = "2018+2020, n=59; variance-optimal 0.79 (0.70-0.88)"
 LAMBDA = 0.0198      # recency decay — half-life ~35 days
-ECON_WEIGHT = 0.35    # how much economics nudges the poll average; tune this
-APPROVAL_WEIGHT = 0.15
+ECON_WEIGHT = 0.3   # how much economics nudges the poll average; tune this
+APPROVAL_WEIGHT = 0.10
 # separate lever for presidential approval; PROVISIONAL — not
 # yet backtested against historical_results, chosen as roughly
 # half of ECON_WEIGHT as a placeholder, not a validated value
