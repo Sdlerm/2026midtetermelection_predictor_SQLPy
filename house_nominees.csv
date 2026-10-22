@@ -1,10 +1,10 @@
 state,district,dem_nominee,rep_nominee,ind_nominee,dem_incumbent,rep_incumbent,dem_candidates_seen,rep_candidates_seen,notes,same_party_general
-AK,1,John Williams,Nick Begich,,,1,John Williams; Mary S. Peltola; Matt Schultz,Nick Begich,
+AK,1,Eric Hafner,Nick Begich,Bill Hill,,1,John Williams; Mary S. Peltola; Matt Schultz,Nick Begich,
 AL,2,Shomari Figures,Rhett Marques,,1,,
 AR,2,Chris Jones,French Hill,,,1
 AZ,1,Amish Shah,Jay Feely,,,1,,Gina Swoboda; Thomas (Jay) Feely,
 AZ,2,Jonathan Nez,Eli Crane,Curtis Goodwin,,1
-AZ,6,JoAnna Mendonza,Juan Ciscomani,,,1,JoAnna Mendonza,Juan Ciscomani,
+AZ,6,JoAnna Mendoza,Juan Ciscomani,,,1,JoAnna Mendonza,Juan Ciscomani,
 CA,3,Richard Pan,Kevin Kiley,,,1
 CA,6,Ami Bera,Rob Tucker,,1.0,,Heidi Hall,Kevin Kiley,
 CA,7,Doris Matsui; Mai Vang,,,1,,,,top-two: both finalists are Democrats,D
@@ -47,7 +47,7 @@ IA,2,Lindsay James,Joe Mitchell,,,1,Lindsay James,Joe Mitchell,
 IA,3,Sarah Trone Garriott,Zach Nunn,,,1,Jennifer Konfrst; Sarah Trone Garriott,Zach Nunn,
 ID,1,Kaylee Peterson,Russ Fulcher,,,1
 IL,4,Raymond Lopez,Robert Cruz,,1,
-IN,5,Deborah Pickett,Victoria Spartz,,,1
+IN,5,J.D. Ford,Victoria Spartz,,,1
 KY,3,Morgan McGarvey,Maria Rodriguez	,,1,,
 KY,4,Melissa Claire Strange,Ed Gallrhein,,,1,,,
 KY,6,Todd Kelly,Andy Barr,,,1
@@ -62,7 +62,7 @@ MI,4,Sean McCann,Bill Huizenga,,,1,Sean McCann,Bill Huizenga,
 MI,7,Bridget Brink,Tom Barrett,,,1,Bridget Brink; Matt Maasdam; William Lawrence,,
 MI,10,Christina Hines,Mike Bouchard,,,1,,Justin Kirk; Mike Bouchard; Robert Lulgjuraj; Steffan Demetropoulos,
 MN,1,Jake Johnson,Brad Finstad,,,1,Jake Johnson,Brad Finstad,
-MN,2,Matt Little,Eric Platt,,1.0,,Kaela Berg; Matt Klein; Matt Little,,
+MN,2,Matt Little,Eric Pratt,,1.0,,Kaela Berg; Matt Klein; Matt Little,,
 MO,1,Wesley Bell,Paul Berry III,,1.0,,Cori Bush; Wesley Bell,,
 MO,2,Fred Wellman,Ann Wagner,,,1,Fred Wellman,Ann Wagner,
 MT,1,Sam Forstag,Aaron Flint,,,1,Matt Rains; Ryan Busse; Sam Forstag,Aaron Flint; Ryan K. Zinke,
@@ -73,7 +73,7 @@ NC,7,Kimberly Hardy,David Rouzer,,,1
 NC,8,Colby Watson,Mark Harris,,,1
 NC,9,Richard Ojeda,Richard Hudson,,,1
 NC,10,Ashley Bell,Pat Harrigan,,,1,Ashley Bell,Pat Harrigan,
-NC,11,Jamie Ager,Jennifer Balckom,,,1
+NC,11,Jamie Ager,Jennifer Balkcom,,,1,
 NC,14,LaKesha Womack,Tim Moore,,,1,LaKesha Womack,Tim Moore,
 NE,1,Chris Backemeyer,Mike Flood,,,1,Chris Backemeyer,Mike Flood,
 NE,2,Denise Powell,Brinker Harding,,,1,Denise Powell; John Cavanaugh,,
@@ -81,7 +81,9 @@ NH,1,Stefany Shaheen,Anthony DiLorenzo,,1.0,,Alice Wade; Bill Conlin; Carleigh B
 NH,2,Maggie Goodlander,Lily Tang Williams,,1.0,,Maggie Goodlander,Lily Tang Williams,
 NJ,2,Zack Mullock,Jeff Van Drew,,,1,,Jeff Van Drew,
 NJ,7,Rebecca Bennett,Thomas H. Kean Jr.,,,1,Rebecca Bennett; Tina Shah,Thomas H. Kean; Thomas H. Kean Jr.,
+NM,1,Melanie Ann Stansbury,Ndidiamaka Okpareke,,1
 NM,2,Gabriel Vasquez,Greg Cunningham,,1.0,,Gabe Vasquez,Greg Cunningham,
+NM,3,Teresa Leger Fernandez,Martin Ruben Zamora,,1,,
 NV,2,Lynn Chapman,Greg Smith,,,1
 NY,1,Chris Gallant,Nicholas J. LaLota,,,1,Chris Gallant,Nicholas J. LaLota,
 NY,4,Laura Gillen,Jeanine Driscol,Blay Tarnaff,1,,,,
@@ -92,33 +94,33 @@ NY,13,Darializa Avila Chevalier,Jomo M. Williams,,1.0,,Adriano Espaillat; Darial
 NY,14,Alexandria Ocasio-Cortez,Diamant Hysenaj,,1.0,,Alexandria Ocasio-Cortez; Diamant Hysenaj;,,
 NY,15,Ritchie Torres,Joseph J. Cinquemani,,1.0,,Jose Vega; Michael Blake; Ritchie Torres,,
 NY,17,Cait Conley,Mike Lawler,,,1,Beth Davidson; Cait Conley; Effie Phillips-Staley; John Cappello; Mike Sacks; Peter Chatzky,,
-NY,18,Pat Ryan,Joseph J. Cinquemani,,1.0,,,,
+NY,18,Pat Ryan,Jackie Auringer,,1.0,,,,
 NY,21,Blake Gendebien,Anthony Constantino,,,1,,Anthony Constantino; Robert Smullen,
 NY,23,Aaron Gies,Nick Langworthy,,,1
-OH,1,Greg Landsman,Eric Conroy,,1,
-OH,7,Matthew Diemer,Max Miller,,,1
+OH,1,Greg Landsman,Eric Conroy,,1,,
+OH,7,Brian Poindexter	,Max Miller,,,1
 OH,9,Marcy Kaptur,Derek Merrin,,1.0,,Marcy Kaptur,Derek Merrin,
-OH,10,Amy Cox,Mike Turner,,,1
+OH,10,Kristina Knickerbocker,Mike Turner,,,1
 OH,15,Don Leonard,Mike Carey,Brennan Barrington	,,1,,,
 OK,5,Jena Nelson,Stephanie Bice,,,1
 PA,1,Bob Harvie,Brian Fitzpatrick,,,1,Bob Harvie,Brian Fitzpatrick,
-PA,7,Susan Wild,Ryan E. Mackenzie,,1,
+PA,7,Bob Brooks,Ryan E. Mackenzie,,1,
 PA,8,Paige Cognetti,Rob Bresnahan Jr.,,,1,Paige Cognetti,Rob Bresnahan Jr.,
 PA,10,Janelle Stelson,Scott Perry,,,1,Janelle Stelson,Scott Perry,
 RI,1,Gabe Amo,Kellie Keenan,,1
 RI,2,Seth M. Magaziner,Victor Mellor,,1
-SC,1,Mac Deford,Mark Smith,,,1,Mac Deford,Mark Smith,
-SC,7,Mal Hyman,Russell Fry,,,1
+SC,1,Nancy Lacore,Jenny Costa Honeycutt,,,1,Mac Deford,Mark Smith,
+SC,7,John Vincent,Russell Fry,,,1
 SD,1,Nikki Gronli,Marty Jackly,,,1
 TX,2,Shaun Finnie	,Steve Toth,,,1
-TN,5,Maryam Abolfazil,Andy Ogles,,,1
+TN,5,Chaz Molder,Charlie Hatcher,,,1
 TN,9,Justin Pearson,Brent Taylor,,1.0,1,Justin Pearson; Marion Alexandra-Williams; Steve Cohen,,
 TX,9,Leticia Gutierrez,Alex Mealer,,,1
 TX,10,Caitlin Rourk,Chris Gober,,,1
 TX,15,Bobby Pulido,Monica De La Cruz,,,1,Bobby Pulido,Monica De La Cruz,
 TX,18,Sylvester Turner,Lana Centonze,,1
 TX,23,Katy Padilla Stout,Brandon Herrera,,,1,Katy Padilla Stout,Brandon Herrera,
-TX,28,Henry Cuellar,Jay Furman,,1
+TX,28,Henry Cuellar,Tano Tijerina,,1
 TX,34,Vicente Gonzalez,Eric Flores,,1.0,,Vicente Gonzalez,Eric Flores,
 TX,35,Johnny Garcia	,Carlos De La Cruz,,,1
 UT,1,Ben McAdams,Riley Owen,,,1,Ben McAdams; Eva Lopez Chavez; Kathleen Riebe; Liban Mohamed; Luis Villarreal; Michael Farrell; Nate Blouin,,
@@ -126,7 +128,7 @@ UT,2,Peter Crosby,Blake Moore,,,1,,Blake D. Moore; Colton Hatch; Karianne Lisonb
 UT,3,Kent Udell,Celeste Maloy,,,1
 UT,4,Jonny Larsen,Mike Kennedy,,,1
 VA,1,Shannon Taylor,Robert Wittman,,,1,Shannon Taylor,Robert J. Wittman,
-VA,2,Missy Cotter Smasal,Jen Kiggans,,,1
+VA,2,Elaine G. Luria,Jen Kiggans,,,1
 VA,5,Tom Perriello,John McGuire,,,1
 VA,6,Beth Macy,Ben Cline,,,1,Beth Macy; Sam Rasoul; Tom Perriello,,
 VA,7,Eugene Vindman,Derrick Anderson,,1.0,,Adele McClure; Alfonso Lopez; Dan Helmer; Elizabeth Guzman; J.P. Cooney; Saddam Salim,,
