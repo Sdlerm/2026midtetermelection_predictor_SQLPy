@@ -27,6 +27,7 @@ from calibration import (
     SIGMA_LOCAL_MARGIN,
     N_SIMS,
     N_SENATE_SEATS,
+    SIM_CHUNK_SENATE,
 )
 
 # Set to an int (e.g. 42) for reproducible runs; None = fresh randomness.
@@ -142,48 +143,65 @@ def baseline_seats(predictions, races):
 
 
 # ---------------------------------------------------------------------
-# Step 3: the simulation core (vectorized)
+# Step 3: the simulation core (vectorized, chunked)
 # ---------------------------------------------------------------------
 def simulate(races, base_d, base_r, n_sims=N_SIMS, seed=RANDOM_SEED,
-             sigma_national=SIGMA_NATIONAL_MARGIN, sigma_local=SIGMA_LOCAL_MARGIN):
+             sigma_national=SIGMA_NATIONAL_MARGIN, sigma_local=SIGMA_LOCAL_MARGIN,
+             chunk_size=SIM_CHUNK_SENATE):
     """
     Run n_sims simulated elections. Returns a results dict of plain
     data structures (no plotting here — the dashboard consumes this).
+
+    Streams the draws in chunks of chunk_size, as monte_carlo_house does, so
+    peak memory is set by chunk_size rather than n_sims. A given (seed,
+    chunk_size) pair reproduces exactly; changing chunk_size repartitions the
+    random stream, so results move only within Monte Carlo error.
     """
     rng = np.random.default_rng(seed)
     margins = np.array([r["margin"] for r in races])      # shape: (n_races,)
     n_races = len(races)
 
-    # One national error per SIMULATION — shape (n_sims, 1). The trailing
-    # 1 is deliberate: when numpy adds a (n_sims, 1) array to a
-    # (n_sims, n_races) array, it BROADCASTS — stretches the size-1 axis
-    # by repeating the value across all n_races columns. So each row
-    # (one simulated election) gets the SAME national error in every
-    # race. That single broadcasting trick is what encodes correlation.
-    national = rng.normal(0.0, sigma_national, size=(n_sims, 1))
-
-    # One local error per race per simulation — shape (n_sims, n_races).
-    local = rng.normal(0.0, sigma_local, size=(n_sims, n_races))
-
-    # margins is (n_races,) and broadcasts across rows the same way.
-    sim_margins = margins + national + local               # (n_sims, n_races)
-
-    dem_side_wins = sim_margins > 0                        # bool, same shape
-
-    # --- Per-race win probability: mean of the win indicator ----------
-    win_prob = dem_side_wins.mean(axis=0)                  # (n_races,)
-
-    # --- Seat math -----------------------------------------------------
     # Osborn's column (dem_party == 'I') counts toward neither party.
     is_true_d = np.array([r["dem_party"] == "D" for r in races])
     osborn_cols = ~is_true_d
 
-    d_seats = base_d + dem_side_wins[:, is_true_d].sum(axis=1)   # (n_sims,)
-    r_seats = base_r + (~dem_side_wins).sum(axis=1)              # R wins any race the dem side loses
-    if osborn_cols.any():
-        osborn_wins = dem_side_wins[:, osborn_cols].any(axis=1)  # (n_sims,) bool
-    else:
-        osborn_wins = np.zeros(n_sims, dtype=bool)
+    win_counts = np.zeros(n_races, dtype=np.int64)
+    d_seats = np.empty(n_sims, dtype=np.int64)
+    r_seats = np.empty(n_sims, dtype=np.int64)
+    osborn_wins = np.zeros(n_sims, dtype=bool)
+
+    done = 0
+    while done < n_sims:
+        k = min(chunk_size, n_sims - done)
+
+        # One national error per SIMULATION — shape (k, 1). The trailing
+        # 1 is deliberate: when numpy adds a (k, 1) array to a
+        # (k, n_races) array, it BROADCASTS — stretches the size-1 axis
+        # by repeating the value across all n_races columns. So each row
+        # (one simulated election) gets the SAME national error in every
+        # race. That single broadcasting trick is what encodes correlation.
+        national = rng.normal(0.0, sigma_national, size=(k, 1))
+
+        # One local error per race per simulation — shape (k, n_races).
+        local = rng.normal(0.0, sigma_local, size=(k, n_races))
+
+        # margins is (n_races,) and broadcasts across rows the same way.
+        sim_margins = margins + national + local           # (k, n_races)
+
+        dem_side_wins = sim_margins > 0                    # bool, same shape
+
+        # --- Per-race win counts; divided by n_sims after the loop --------
+        win_counts += dem_side_wins.sum(axis=0)
+
+        # --- Seat math -------------------------------------------------
+        d_seats[done:done + k] = base_d + dem_side_wins[:, is_true_d].sum(axis=1)
+        r_seats[done:done + k] = base_r + (~dem_side_wins).sum(axis=1)  # R wins any race the dem side loses
+        if osborn_cols.any():
+            osborn_wins[done:done + k] = dem_side_wins[:, osborn_cols].any(axis=1)
+
+        done += k
+
+    win_prob = win_counts / float(n_sims)                  # (n_races,)
 
     # Control: R holds at 50 (Vance tiebreaker), so D needs 51 outright.
     p_d_majority = float((d_seats >= 51).mean())

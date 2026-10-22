@@ -26,8 +26,9 @@ TWO DELIBERATE DEPARTURES FROM THE SENATE VERSION
    lean_redrawn, and the third tier is not a refinement — it is twice the
    second, and it covers 81 districts.
 
-2. CHUNKED SIMULATION. The Senate allocates the full (n_sims, n_races) error
-   matrix at once. At 1,000,000 x 435 that array is 3.5 GB and the calculation
+2. CHUNKED SIMULATION. Allocating the full (n_sims, n_races) error matrix at
+   once (as the Senate sim originally did) is out of the question here. At
+   1,000,000 x 435 that array is 3.5 GB and the calculation
    needs two live simultaneously — 7 GB, on a 16 GB machine, to hold values
    that get reduced to a boolean immediately. This file streams the same
    computation in chunks of SIM_CHUNK_HOUSE and accumulates. The arithmetic is

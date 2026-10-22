@@ -289,15 +289,22 @@ PRESIDENT_PARTY = "R"
 N_HOUSE_SEATS = 435
 HOUSE_MAJORITY = 218          # 435 is odd, so there is no tie and no tiebreaker
 
-# Simulations per chunk in monte_carlo_house.py. The Senate allocates one
-# (n_sims, n_races) array outright; at 1M x 435 that would be 3.5 GB per array
-# and the sim needs two live at once, so the House streams in chunks instead.
+# Simulations per chunk in monte_carlo_house.py. Allocating one (n_sims, n_races)
+# array outright would be 3.5 GB per array at 1M x 435, and the sim needs two
+# live at once, so the House streams in chunks instead.
 # 25,000 x 435 float64 ≈ 87 MB per array — comfortable, and large enough that
 # per-chunk overhead stays negligible.
+# 2026-10-21: was 500_000 (≈1.75 GB per chunk). With the Senate sim that put the
+# dashboard at a 3.2 GB peak, and Streamlit Community Cloud kills the container
+# with no traceback when it runs out of memory. Keep this small.
 # Reasonable change: increase SIM_CHUNK_HOUSE if the sim is running trivially fast and you want to reduce the number of chunks, or decrease it if the sim is running slowly and you want to reduce memory
 # e.g. 1_000_000 would be 3.5 GB per array, which is too much for most machines to handle comfortably.; 500_000 would
 # be 1.75 GB per array, which is still too much for most machines to handle comfortably.; 100_000 would be 350 MB per array, which is comfortable for most machines to handle.; 50_000 would be 175 MB per array, which is comfortable for most machines to handle.; 25_000 would be 87.5 MB per array, which is comfortable for most machines to handle.; 10_000 would be 35 MB per array, which is comfortable for most machines to handle.; 5_000 would be 17.5 MB per array, which is comfortable for most machines to handle.; 1_000 would be 3.5 MB per array, which is comfortable for most machines to handle.
-SIM_CHUNK_HOUSE = 500_000
+SIM_CHUNK_HOUSE = 25_000
+
+# Same idea for monte_carlo_senate.py: ~35 races, so 100,000 x 35 float64 ≈ 28 MB
+# per array. Unchunked at 1M sims the Senate sim alone peaked near 850 MB.
+SIM_CHUNK_SENATE = 100_000
 
 # ---------------------------------------------------------------------
 # Simulation count
