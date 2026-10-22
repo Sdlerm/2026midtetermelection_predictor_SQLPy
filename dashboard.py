@@ -39,6 +39,7 @@ from calibration import (
     SIGMA_TOTAL_MARGIN_HOUSE_POLLED,
 )
 from house_model import national_environment_margin, predict_house_races
+from init_db import DB_PATH
 from senate_model import ECON_WEIGHT, STATES_WITH_2026_RACES, predict_all_races, project_senate_control
 
 # ---------------------------------------------------------------------------
@@ -48,6 +49,15 @@ from senate_model import ECON_WEIGHT, STATES_WITH_2026_RACES, predict_all_races,
 st.set_page_config(page_title="2026 Election Predictor", layout="wide")
 st.title("🗳️ 2026 Election Predictor")
 st.caption("Weighted polling average · Credibility × recency decay · Updates on refresh")
+
+# get_connection() silently creates an EMPTY elections.db when the file is
+# missing (that is how init_db.py bootstraps it), which on a fresh deploy turns
+# into a confusing "no such table" deep inside the models. Fail here instead.
+if not os.path.exists(DB_PATH):
+    st.error(f"Database not found at `{DB_PATH}`. Commit db/elections.db "
+             "(it is under the ignored db/ folder, so use `git add -f`) or run "
+             "init_db.py and the ingest scripts.")
+    st.stop()
 
 PARTY_COLOR = {"D": "#3a7abf", "R": "#c0392b", "I": "#8e44ad"}
 PARTY_ICON  = {"D": "🔵", "R": "🔴", "I": "🟣"}
