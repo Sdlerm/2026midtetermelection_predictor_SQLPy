@@ -1,0 +1,60 @@
+(1) After a fresh database rebuild, why must load_pollster_ratings.py run before senate_model.py?
+load_pollster_ratings.py creates the polls table
+
+It doesn't matter; the scripts are independent
+
+senate_model.py deletes the pollsters table when it finishes
+
+senate_model.py reads pollster grades and credibility to weight polls and apply the F-exclusion rule
+
+Correct
+Exactly right. The model joins polls to pollsters and reads po.grade (for the F rule) and credibility (for weighting). On a fresh rebuild those columns are empty until the ratings loader fills them. Since the clobber fix, re-running ingest no longer wipes credibility, so this ordering matters mainly after a rebuild.
+Relevant code is in load_pollster_ratings.py and senate_model.py. See below:
+from senate_molde.py:
+    # def weighted_averege(polls: pd.DataFrame) -> float:
+    #     """Return the weighted average of polls, using pollster credibility as weights.
+    #     """
+    #     #     # Join polls to pollsters to get credibility
+    #     polls = polls.merge(pollsters[['pollster', 'credibility']], on='pollster', how='left')
+    #     #     # Compute weighted average
+    #     weighted_avg = (polls['value'] * polls['credibility']).sum() / polls['credibility'].sum()
+    #     return weighted_avg
+
+F rule: If a pollster is F-rated, it is excluded from the weighted average unless it is the only pollster for that race. The model uses the po.grade column to determine if a pollster is F-rated. If the grade is F, the pollster is excluded from the weighted average calculation. This is implemented in the weighted_average function in senate_model.py, where it checks the po.grade column and excludes F-rated pollsters from the calculation unless they are the only pollster for that race.
+
+(2) The F-exclusion SQL says: WHERE COALESCE(po.grade, '') != 'F'. What would break if you removed COALESCE and wrote po.grade != 'F'?
+# If you removed COALESCE, any rows where po.grade is NULL would be excluded from the result,
+which could lead to incorrect calculations.
+COALESCE ensures that NULL values are treated as empty strings, so they are not excluded unless they are explicitly 'F'.
+Yes, NULL is the sneaky one. In SQL, any comparison with NULL returns NULL ("unknown"), not TRUE, and WHERE keeps only TRUE rows. So NULL-grade pollsters would quietly drop out. COALESCE swaps NULL for '' first, and '' != 'F' is TRUE. That's a silent failure, the exact kind your project rules ban.
+
+(3) Why does the model use pollster credibility to weight polls?
+The model uses pollster credibility to weight polls because not all pollsters are equally reliable.
+Credibility scores reflect the historical accuracy and methodology of each pollster, allowing the model to give more weight to polls from more credible sources. This helps to produce a more accurate and reliable prediction by reducing the influence of less trustworthy polls on the overall result.
+
+(4) Give a common-sense example of the calculations of forecasted margin, using GA senate 2026 as an example:
+# Data from past week (10-22 to 10-29) of polling in GA senate 2026 (D Ossoff vs R Collins):
+# i.e. show how senate_model.py calculates its output
+Poll | Letter grade | Credibility | Value (D - R)
+Poll A | B | 0.8 | +3
+Poll B | C | 0.5 | +1
+Poll C | F | 0.1 | -2
+# Weighted average calculation:
+Weighted average = (Poll A value * Poll A credibility + Poll B value * Poll B credibility + Poll C value * Poll C
+credibility) / (Poll A credibility + Poll B credibility + Poll C credibility)
+# Weighted average = (+3 * 0.8 + +1 * 0.5 + -2 * 0.1) / (0.8 + 0.5 + 0.1)
+# Weighted average = (2.4 + 0.5 - 0.2)
+# Weighted average = 2.7 / 1.4 = 1.93 (rounded to 2 decimal places)
+
+(5) The Senate uses σ_total = 5.3 and σ_national = 2.5. What is σ_local?
+    2.8 (5.3 − 2.5)
+
+    Incorrect
+    7.8 (5.3 + 2.5)
+
+    About 4.67
+    
+    Correct
+    2.12 (5.3 ÷ 2.5)
+
+    This is the variance-additivity trap. The correct answer is About 4.67.√(5.3² − 2.5²) = √(28.09 − 6.25) = √21.84 ≈ 4.67. Independent errors add in quadrature, like the sides of a right triangle: σ_national and σ_local are the legs, σ_total is the hypotenuse. calibration.py computes this rather than letting you set it by hand, so the three can never disagree.

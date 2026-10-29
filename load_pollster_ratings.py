@@ -11,8 +11,19 @@ from init_db import get_connection
 # Letter -> numeric mapping defined at generation time;
 # only the RATIOS between values affect the weighted average.
 # Unmatched pollsters default to C/D = 1.0 (unknown = unproven).
+
+#Must run load_pollster_ratings.py before running senate_model.py or house_model.py, otherwise the model will use
+# default credibility values for pollsters and may produce inaccurate results.
+#E.g. prior to running senate_model.py, run: python load_pollster_ratings.py, in order to update the pollster ratings in the database.
+#after database init, run load_pollster_ratings.py to update the pollster ratings in the database. This will ensure that the model uses the most up-to-date credibility values for pollsters, which can significantly impact the accuracy of the model's predictions.
+# F-excluded pollsters are still in the DB with a small nonzero credibility, but they are ignored in the model unless they are the only polling available for a race.
 # F pollsters keep a small nonzero numeric but are excluded per-race in
 # senate_model.py unless they are the only polling available for that race.
+
+#After a fresh database rebuild, why must load_pollster_ratings.py run before senate_model.py?
+# Because the model uses pollster credibility values to weight polling data, and if the ratings are not loaded, the model will use default credibility values, which may not accurately reflect the quality of the pollsters. This can lead to skewed predictions and less reliable results. By running load_pollster_ratings.py first, you ensure that the database has the most current and accurate pollster ratings, allowing the model to make better-informed predictions based on weighted polling data.
+# However, since the scripts are independent, you can run senate_model.py or house_model.py without running load_pollster_ratings.py first, but the model will use default credibility values for pollsters and may produce inaccurate results. It is recommended to run load_pollster_ratings.py before running the model scripts to ensure the most accurate predictions.
+
 RATINGS_PATH = os.path.join(os.path.dirname(__file__), "pollster_ratings.csv")
 
 EXPECTED_COLUMNS = [

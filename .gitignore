@@ -2,7 +2,6 @@
 .env
 # — Generated data ——————————————————————
 *.sqlite3
-db/
 /data/charts/
 /data/cb_2024_us_cd119_500k
 /data/cb_2024_us_cd119_500k.zip
@@ -29,7 +28,6 @@ db/
 /data/poll_report_2026-08-18.md
 /data/poll_report_2026-08-19.md
 /data/cd119.geojson
-/db/
 
 # — Python runtime ———————————————————————
 __pycache__/

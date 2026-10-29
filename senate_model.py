@@ -15,7 +15,7 @@ LEAN_ALPHA = 0.82
 # house_model.LEAN_ALPHA_HOUSE is a separate, deliberately unmatched 0.80: see
 # the note there for why it is not tracked to this one.)
 #
-# BACKTESTED 2026-08-10, re-measured 2026-08-25 against 2018 + 2020 (59 races)
+# BACKTESTED 2026-08-10, remeasured 2026-08-25 against 2018 + 2020 (59 races)
 # — run backtest_senate.py. Walked 0.82 -> 0.78 -> 0.788 on 2026-08-25; the
 # figures below are the re-run at 0.788, which lands on the variance-optimal
 # minimum to three decimals (0.82 sat 0.02 off it, 0.78 sat 0.01 off).
